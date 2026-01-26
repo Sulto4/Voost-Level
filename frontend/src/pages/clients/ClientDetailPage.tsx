@@ -216,6 +216,10 @@ export function ClientDetailPage() {
   const [activityUserFilter, setActivityUserFilter] = useState<string | null>(null)
   const [isActivityFilterDropdownOpen, setIsActivityFilterDropdownOpen] = useState(false)
   const activityFilterRef = useRef<HTMLDivElement>(null)
+  // Activity pagination
+  const ACTIVITIES_PAGE_SIZE = 10
+  const [activitiesHasMore, setActivitiesHasMore] = useState(false)
+  const [loadingMoreActivities, setLoadingMoreActivities] = useState(false)
   const { currentWorkspace, currentRole } = useWorkspace()
   const canEdit = currentRole !== 'viewer'
 
@@ -263,9 +267,17 @@ export function ClientDetailPage() {
     setProjectsLoading(false)
   }
 
-  async function fetchActivities() {
+  async function fetchActivities(loadMore = false) {
     if (!id) return
-    setActivitiesLoading(true)
+
+    if (loadMore) {
+      setLoadingMoreActivities(true)
+    } else {
+      setActivitiesLoading(true)
+    }
+
+    const offset = loadMore ? activities.length : 0
+
     const { data, error } = await supabase
       .from('activities')
       .select(`
@@ -274,13 +286,26 @@ export function ClientDetailPage() {
       `)
       .eq('client_id', id)
       .order('created_at', { ascending: false })
+      .range(offset, offset + ACTIVITIES_PAGE_SIZE - 1)
 
     if (error) {
       console.error('Error fetching activities:', error)
     } else {
-      setActivities(data || [])
+      const newActivities = data || []
+      if (loadMore) {
+        setActivities(prev => [...prev, ...newActivities])
+      } else {
+        setActivities(newActivities)
+      }
+      // Check if there are more activities to load
+      setActivitiesHasMore(newActivities.length === ACTIVITIES_PAGE_SIZE)
     }
-    setActivitiesLoading(false)
+
+    if (loadMore) {
+      setLoadingMoreActivities(false)
+    } else {
+      setActivitiesLoading(false)
+    }
   }
 
   async function fetchContacts() {
@@ -974,6 +999,11 @@ export function ClientDetailPage() {
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-4">
               <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
                 Activity Timeline
+                {activities.length > 0 && (
+                  <span className="ml-2 text-sm font-normal text-slate-500 dark:text-slate-400">
+                    ({filteredActivities.length}{(activityTypeFilter || activityUserFilter) && ` of ${activities.length}`}{activitiesHasMore && '+'})
+                  </span>
+                )}
               </h2>
               <div className="flex gap-2 flex-wrap">
                 {/* Activity Filter */}
@@ -1242,6 +1272,25 @@ export function ClientDetailPage() {
                     </div>
                   )
                 })}
+                {/* Load More Button */}
+                {activitiesHasMore && !activityTypeFilter && !activityUserFilter && (
+                  <div className="text-center pt-4">
+                    <button
+                      onClick={() => fetchActivities(true)}
+                      disabled={loadingMoreActivities}
+                      className="btn-outline"
+                    >
+                      {loadingMoreActivities ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-600 mr-2" />
+                          Loading...
+                        </>
+                      ) : (
+                        'Load More Activities'
+                      )}
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
