@@ -56,11 +56,34 @@ export function FileList({ files, loading, onFileDeleted, canEdit = true }: File
 
   async function handleDownload(file: FileWithUser) {
     try {
+      // First verify the user has access to this file through the database
+      // This ensures RLS policies are enforced before attempting download
+      const { data: fileRecord, error: accessError } = await supabase
+        .from('files')
+        .select('id, storage_path')
+        .eq('id', file.id)
+        .single()
+
+      if (accessError || !fileRecord) {
+        console.error('Access denied or file not found:', accessError)
+        toast.error('Access denied: You do not have permission to download this file')
+        return
+      }
+
+      // User has database access, proceed with storage download
+      // Storage RLS will also verify access independently
       const { data, error } = await supabase.storage
         .from('client-files')
-        .download(file.storage_path)
+        .download(fileRecord.storage_path)
 
-      if (error) throw error
+      if (error) {
+        // Handle specific storage errors
+        if (error.message?.includes('not authorized') || error.message?.includes('403')) {
+          toast.error('Access denied: You do not have permission to download this file')
+          return
+        }
+        throw error
+      }
 
       // Create download link
       const url = URL.createObjectURL(data)
