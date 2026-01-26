@@ -50,6 +50,7 @@ export function ProjectDetailPage() {
   const [addingSubtask, setAddingSubtask] = useState(false)
   const [taskAssigneeFilter, setTaskAssigneeFilter] = useState<string | null>(null) // null = all, 'unassigned' = unassigned, or user ID
   const [taskPriorityFilter, setTaskPriorityFilter] = useState<string | null>(null) // null = all, or 'low' | 'medium' | 'high'
+  const [taskStatusFilter, setTaskStatusFilter] = useState<string | null>(null) // null = all, or 'todo' | 'in_progress' | 'done'
   const [isTaskFilterDropdownOpen, setIsTaskFilterDropdownOpen] = useState(false)
 
   useEffect(() => {
@@ -390,10 +391,17 @@ export function ProjectDetailPage() {
     { value: 'low', label: 'Low', color: 'bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-300' },
   ]
 
-  // Count active task filters
-  const activeTaskFilterCount = (taskAssigneeFilter ? 1 : 0) + (taskPriorityFilter ? 1 : 0)
+  // Status filter options for tasks
+  const taskStatusOptions = [
+    { value: 'todo', label: 'To Do', color: 'bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-300' },
+    { value: 'in_progress', label: 'In Progress', color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300' },
+    { value: 'done', label: 'Done', color: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' },
+  ]
 
-  // Filter tasks by assignee and priority
+  // Count active task filters
+  const activeTaskFilterCount = (taskAssigneeFilter ? 1 : 0) + (taskPriorityFilter ? 1 : 0) + (taskStatusFilter ? 1 : 0)
+
+  // Filter tasks by assignee, priority, and status
   const filteredTasks = tasks.filter(task => {
     // Assignee filter
     if (taskAssigneeFilter) {
@@ -402,6 +410,8 @@ export function ProjectDetailPage() {
     }
     // Priority filter
     if (taskPriorityFilter && task.priority !== taskPriorityFilter) return false
+    // Status filter
+    if (taskStatusFilter && task.status !== taskStatusFilter) return false
     return true
   })
 
@@ -737,6 +747,36 @@ export function ProjectDetailPage() {
                         onClick={() => setIsTaskFilterDropdownOpen(false)}
                       />
                       <div className="absolute right-0 top-full mt-2 w-64 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg z-20">
+                        {/* Status Filter Section */}
+                        <div className="p-3 border-b border-slate-200 dark:border-slate-700">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm font-medium text-slate-900 dark:text-white">Status</span>
+                            {taskStatusFilter && (
+                              <button
+                                onClick={() => setTaskStatusFilter(null)}
+                                className="text-xs text-primary-600 hover:text-primary-700 dark:text-primary-400"
+                              >
+                                Clear
+                              </button>
+                            )}
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {taskStatusOptions.map((status) => (
+                              <button
+                                key={status.value}
+                                onClick={() => setTaskStatusFilter(taskStatusFilter === status.value ? null : status.value)}
+                                className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                                  taskStatusFilter === status.value
+                                    ? status.color
+                                    : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
+                                }`}
+                              >
+                                {status.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
                         {/* Priority Filter Section */}
                         <div className="p-3 border-b border-slate-200 dark:border-slate-700">
                           <div className="flex items-center justify-between mb-2">
@@ -828,6 +868,7 @@ export function ProjectDetailPage() {
                               onClick={() => {
                                 setTaskAssigneeFilter(null)
                                 setTaskPriorityFilter(null)
+                                setTaskStatusFilter(null)
                                 setIsTaskFilterDropdownOpen(false)
                               }}
                               className="w-full px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
@@ -853,6 +894,18 @@ export function ProjectDetailPage() {
             {activeTaskFilterCount > 0 && (
               <div className="flex items-center gap-2 mb-4 flex-wrap">
                 <span className="text-sm text-slate-500 dark:text-slate-400">Filtering by:</span>
+                {taskStatusFilter && (
+                  <span className={`inline-flex items-center gap-1 px-2 py-1 text-sm rounded-full ${taskStatusOptions.find(s => s.value === taskStatusFilter)?.color}`}>
+                    {taskStatusOptions.find(s => s.value === taskStatusFilter)?.label}
+                    <button
+                      onClick={() => setTaskStatusFilter(null)}
+                      className="ml-1 hover:opacity-70"
+                      aria-label="Clear status filter"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                )}
                 {taskPriorityFilter && (
                   <span className={`inline-flex items-center gap-1 px-2 py-1 text-sm rounded-full ${priorityOptions.find(p => p.value === taskPriorityFilter)?.color}`}>
                     {priorityOptions.find(p => p.value === taskPriorityFilter)?.label} priority
