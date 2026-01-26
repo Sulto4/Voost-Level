@@ -12,6 +12,8 @@ import {
   ChevronDown,
   Check,
   Building2,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from 'lucide-react'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import { useAuth } from '../../context/AuthContext'
@@ -42,7 +44,17 @@ export function Sidebar() {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [isAddClientModalOpen, setIsAddClientModalOpen] = useState(false)
+  const [isCollapsed, setIsCollapsed] = useState(() => {
+    // Load collapsed state from localStorage
+    const saved = localStorage.getItem('sidebar-collapsed')
+    return saved === 'true'
+  })
   const dropdownRef = useRef<HTMLDivElement>(null)
+
+  // Save collapsed state to localStorage
+  useEffect(() => {
+    localStorage.setItem('sidebar-collapsed', String(isCollapsed))
+  }, [isCollapsed])
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -57,33 +69,44 @@ export function Sidebar() {
 
   return (
     <>
-      <aside className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col">
+      <aside className={clsx(
+        "hidden lg:fixed lg:inset-y-0 lg:flex lg:flex-col transition-all duration-300",
+        isCollapsed ? "lg:w-16" : "lg:w-64"
+      )}>
         <div className="flex flex-col flex-grow bg-white dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700">
           {/* Workspace Selector */}
-          <div className="p-4 border-b border-slate-200 dark:border-slate-700">
+          <div className={clsx("border-b border-slate-200 dark:border-slate-700", isCollapsed ? "p-2" : "p-4")}>
             <div className="relative" ref={dropdownRef}>
               <button
                 onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                className="w-full flex items-center justify-between px-3 py-2.5 min-h-[44px] text-left text-sm font-medium text-slate-900 dark:text-white bg-slate-100 dark:bg-slate-700 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+                className={clsx(
+                  "w-full flex items-center text-left text-sm font-medium text-slate-900 dark:text-white bg-slate-100 dark:bg-slate-700 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors",
+                  isCollapsed ? "justify-center px-2 py-2.5 min-h-[44px]" : "justify-between px-3 py-2.5 min-h-[44px]"
+                )}
+                title={isCollapsed ? currentWorkspace?.name || 'Select Workspace' : undefined}
               >
-                <div className="flex items-center min-w-0 flex-1">
+                <div className={clsx("flex items-center", isCollapsed ? "" : "min-w-0 flex-1")}>
                   {currentWorkspace?.logo_url ? (
                     <img
                       src={currentWorkspace.logo_url}
                       alt={currentWorkspace.name}
-                      className="h-6 w-6 rounded object-cover mr-2 flex-shrink-0"
+                      className={clsx("rounded object-cover flex-shrink-0", isCollapsed ? "h-6 w-6" : "h-6 w-6 mr-2")}
                     />
                   ) : (
-                    <Building2 className="h-5 w-5 mr-2 flex-shrink-0 text-slate-500" />
+                    <Building2 className={clsx("flex-shrink-0 text-slate-500", isCollapsed ? "h-6 w-6" : "h-5 w-5 mr-2")} />
                   )}
-                  <span className="truncate">
-                    {currentWorkspace?.name || 'Select Workspace'}
-                  </span>
+                  {!isCollapsed && (
+                    <span className="truncate">
+                      {currentWorkspace?.name || 'Select Workspace'}
+                    </span>
+                  )}
                 </div>
-                <ChevronDown className={clsx(
-                  'h-4 w-4 text-slate-500 transition-transform flex-shrink-0',
-                  isDropdownOpen && 'rotate-180'
-                )} />
+                {!isCollapsed && (
+                  <ChevronDown className={clsx(
+                    'h-4 w-4 text-slate-500 transition-transform flex-shrink-0',
+                    isDropdownOpen && 'rotate-180'
+                  )} />
+                )}
               </button>
 
               {/* Dropdown Menu */}
@@ -148,7 +171,7 @@ export function Sidebar() {
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 px-2 py-4 space-y-1">
+          <nav className={clsx("flex-1 py-4 space-y-1", isCollapsed ? "px-2" : "px-2")}>
             {navigation
               .filter((item) => {
                 const userRoleLevel = currentRole ? roleLevel[currentRole] || 0 : 0
@@ -159,51 +182,82 @@ export function Sidebar() {
               <NavLink
                 key={item.name}
                 to={item.href}
+                title={isCollapsed ? item.name : undefined}
                 className={({ isActive }) =>
                   clsx(
-                    'flex items-center px-3 py-2.5 min-h-[44px] text-sm font-medium rounded-lg transition-colors',
+                    'flex items-center min-h-[44px] text-sm font-medium rounded-lg transition-colors',
+                    isCollapsed ? 'justify-center px-2 py-2.5' : 'px-3 py-2.5',
                     isActive
                       ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300'
                       : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
                   )
                 }
               >
-                <item.icon className="mr-3 h-5 w-5" />
-                {item.name}
+                <item.icon className={clsx("h-5 w-5", !isCollapsed && "mr-3")} />
+                {!isCollapsed && item.name}
               </NavLink>
             ))}
           </nav>
 
           {/* Quick Add Button */}
-          <div className="p-4 border-t border-slate-200 dark:border-slate-700">
-            <QuickAddMenu
-              onAddClient={() => setIsAddClientModalOpen(true)}
-            />
-          </div>
+          {!isCollapsed && (
+            <div className="p-4 border-t border-slate-200 dark:border-slate-700">
+              <QuickAddMenu
+                onAddClient={() => setIsAddClientModalOpen(true)}
+              />
+            </div>
+          )}
 
           {/* User Profile */}
-          <div className="p-4 border-t border-slate-200 dark:border-slate-700">
-            <div className="flex items-center">
+          <div className={clsx("border-t border-slate-200 dark:border-slate-700", isCollapsed ? "p-2" : "p-4")}>
+            <div className={clsx("flex items-center", isCollapsed && "justify-center")}>
               {profile?.avatar_url ? (
                 <img
                   src={profile.avatar_url}
                   alt={profile.full_name || 'User avatar'}
                   className="h-8 w-8 rounded-full object-cover"
+                  title={isCollapsed ? profile?.full_name || profile?.email || 'User' : undefined}
                 />
               ) : (
-                <div className="h-8 w-8 rounded-full bg-primary-500 flex items-center justify-center text-white font-medium">
+                <div
+                  className="h-8 w-8 rounded-full bg-primary-500 flex items-center justify-center text-white font-medium"
+                  title={isCollapsed ? profile?.full_name || profile?.email || 'User' : undefined}
+                >
                   {profile?.full_name?.[0]?.toUpperCase() || profile?.email?.[0]?.toUpperCase() || 'U'}
                 </div>
               )}
-              <div className="ml-3 min-w-0 flex-1">
-                <p className="text-sm font-medium text-slate-900 dark:text-white truncate">
-                  {profile?.full_name || 'User'}
-                </p>
-                <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
-                  {profile?.email}
-                </p>
-              </div>
+              {!isCollapsed && (
+                <div className="ml-3 min-w-0 flex-1">
+                  <p className="text-sm font-medium text-slate-900 dark:text-white truncate">
+                    {profile?.full_name || 'User'}
+                  </p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                    {profile?.email}
+                  </p>
+                </div>
+              )}
             </div>
+          </div>
+
+          {/* Collapse Toggle Button */}
+          <div className={clsx("border-t border-slate-200 dark:border-slate-700", isCollapsed ? "p-2" : "p-4")}>
+            <button
+              onClick={() => setIsCollapsed(!isCollapsed)}
+              className={clsx(
+                "flex items-center min-h-[44px] text-sm font-medium rounded-lg transition-colors text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700",
+                isCollapsed ? "w-full justify-center px-2 py-2.5" : "w-full px-3 py-2.5"
+              )}
+              title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            >
+              {isCollapsed ? (
+                <PanelLeftOpen className="h-5 w-5" />
+              ) : (
+                <>
+                  <PanelLeftClose className="h-5 w-5 mr-3" />
+                  Collapse
+                </>
+              )}
+            </button>
           </div>
         </div>
       </aside>
