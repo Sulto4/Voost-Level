@@ -249,6 +249,174 @@
   /* This class is used to hide elements in print via the @media print rule above */
 }
 
+/* High Contrast Mode Support */
+@media (forced-colors: active) {
+  /* Ensure all interactive elements have visible borders */
+  .btn,
+  .btn-primary,
+  .btn-secondary,
+  .btn-outline,
+  .btn-ghost,
+  .btn-danger,
+  .btn-warning,
+  .btn-info {
+    border: 2px solid ButtonText;
+    background: ButtonFace;
+    color: ButtonText;
+    forced-color-adjust: none;
+  }
+
+  .btn:hover,
+  .btn:focus {
+    border-color: Highlight;
+    color: Highlight;
+  }
+
+  .btn:disabled {
+    border-color: GrayText;
+    color: GrayText;
+  }
+
+  /* Input fields */
+  .input {
+    border: 2px solid ButtonText;
+    background: Field;
+    color: FieldText;
+    forced-color-adjust: none;
+  }
+
+  .input:focus {
+    border-color: Highlight;
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
+
+  .input:disabled {
+    border-color: GrayText;
+    color: GrayText;
+  }
+
+  /* Cards and containers */
+  .card {
+    border: 2px solid ButtonText;
+    background: Canvas;
+    color: CanvasText;
+  }
+
+  /* Badges - ensure readable */
+  .badge {
+    border: 1px solid currentColor;
+    background: Canvas;
+    color: CanvasText;
+  }
+
+  /* Links */
+  a {
+    color: LinkText;
+    text-decoration: underline;
+  }
+
+  a:visited {
+    color: VisitedText;
+  }
+
+  a:hover,
+  a:focus {
+    color: Highlight;
+  }
+
+  /* Focus indicators */
+  *:focus {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
+
+  /* Ensure SVG icons remain visible */
+  svg {
+    forced-color-adjust: auto;
+  }
+
+  /* Tables */
+  table,
+  th,
+  td {
+    border: 1px solid ButtonText;
+  }
+
+  th {
+    background: ButtonFace;
+  }
+
+  /* Checkboxes and form controls */
+  input[type="checkbox"],
+  input[type="radio"] {
+    forced-color-adjust: auto;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar-thumb {
+    background: ButtonText;
+    border: 1px solid Canvas;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: Canvas;
+  }
+
+  /* Modals/dialogs */
+  [role="dialog"],
+  [role="alertdialog"] {
+    border: 2px solid ButtonText;
+    background: Canvas;
+  }
+
+  /* Alerts */
+  [role="alert"] {
+    border: 2px solid ButtonText;
+    background: Canvas;
+    color: CanvasText;
+  }
+
+  /* Selection */
+  ::selection {
+    background: Highlight;
+    color: HighlightText;
+  }
+}
+
+/* Additional high contrast preference support */
+@media (prefers-contrast: more) {
+  /* Increase border visibility */
+  .btn,
+  .input,
+  .card {
+    border-width: 2px;
+  }
+
+  /* Stronger focus indicators */
+  *:focus {
+    outline-width: 3px;
+    outline-offset: 2px;
+  }
+
+  /* Increase text contrast */
+  body {
+    @apply text-slate-900 dark:text-white;
+  }
+
+  /* Ensure sufficient contrast for placeholder text */
+  ::placeholder {
+    @apply text-slate-600 dark:text-slate-300;
+    opacity: 1;
+  }
+
+  /* Make subtle elements more visible */
+  .text-slate-400,
+  .text-slate-500 {
+    @apply text-slate-600 dark:text-slate-300;
+  }
+}
+
 /* Utility class to force show in print (override default hiding) */
 .print-show {
   /* This class overrides the button hiding in print */
