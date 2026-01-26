@@ -104,7 +104,7 @@ export function EditClientModal({ isOpen, onClose, client, onClientUpdated }: Ed
         )}
 
         {success && (
-          <div className="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg text-green-600 dark:text-green-400 text-sm">
+          <div className="p-3 bg-secondary-50 dark:bg-secondary-900/20 border border-secondary-200 dark:border-secondary-800 rounded-lg text-secondary dark:text-secondary-400 text-sm">
             Client updated successfully!
           </div>
         )}

@@ -44,8 +44,8 @@ export function ResetPasswordPage() {
       <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-background-dark px-4">
         <div className="w-full max-w-md">
           <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl p-8 text-center">
-            <div className="mx-auto w-12 h-12 bg-green-100 dark:bg-green-900/20 rounded-full flex items-center justify-center mb-4">
-              <CheckCircle className="h-6 w-6 text-green-600 dark:text-green-400" />
+            <div className="mx-auto w-12 h-12 bg-secondary-100 dark:bg-secondary-900/20 rounded-full flex items-center justify-center mb-4">
+              <CheckCircle className="h-6 w-6 text-secondary dark:text-secondary-400" />
             </div>
             <h1 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">
               Password reset successful
