@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, Link, useNavigate, useLocation } from 'react-router-dom'
-import { ArrowLeft, Edit, Trash2, Mail, Phone, Globe, Building2, Plus, Calendar, DollarSign, MessageSquare, Users, CheckSquare, Download, Code, Star, User } from 'lucide-react'
+import { ArrowLeft, Edit, Trash2, Mail, Phone, Globe, Building2, Plus, Calendar, DollarSign, MessageSquare, Users, CheckSquare, Download, Code, Star, User, RotateCcw } from 'lucide-react'
 import { clsx } from 'clsx'
 import { supabase } from '../../lib/supabase'
 import { formatRelativeTime } from '../../lib/dateUtils'
@@ -189,6 +189,7 @@ export function ClientDetailPage() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [restoring, setRestoring] = useState(false)
   const [isAddProjectModalOpen, setIsAddProjectModalOpen] = useState(false)
   const [isEditProjectModalOpen, setIsEditProjectModalOpen] = useState(false)
   const [selectedProject, setSelectedProject] = useState<Project | null>(null)
@@ -405,6 +406,29 @@ export function ClientDetailPage() {
     }
   }
 
+  async function handleRestore() {
+    if (!client) return
+
+    setRestoring(true)
+    // Clear deleted_at to restore the client
+    const { error } = await supabase
+      .from('clients')
+      .update({ deleted_at: null })
+      .eq('id', client.id)
+
+    if (error) {
+      console.error('Error restoring client:', error)
+      setRestoring(false)
+    } else {
+      // Refresh client data to show updated state
+      await fetchClient()
+      setRestoring(false)
+    }
+  }
+
+  // Check if client is deleted (archived)
+  const isDeleted = client?.deleted_at !== null && client?.deleted_at !== undefined
+
   const statusColors: Record<string, string> = {
     lead: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
     active: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
@@ -440,6 +464,18 @@ export function ClientDetailPage() {
 
   return (
     <div className="space-y-6">
+      {/* Deleted/Archived Banner */}
+      {isDeleted && (
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 flex items-center justify-between">
+          <div className="flex items-center">
+            <Trash2 className="h-5 w-5 text-red-500 dark:text-red-400 mr-3" />
+            <span className="text-red-700 dark:text-red-300">
+              This client has been deleted. Click "Restore" to bring it back to the active clients list.
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Breadcrumbs */}
       <Breadcrumbs
         items={[
@@ -486,14 +522,28 @@ export function ClientDetailPage() {
               <span className="hidden sm:inline">Edit</span>
             </button>
           )}
-          {canEdit && (
+          {canEdit && isDeleted && (
+            <button
+              onClick={handleRestore}
+              disabled={restoring}
+              className="btn-outline text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20"
+            >
+              {restoring ? (
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-green-300 border-t-green-600 sm:mr-2" />
+              ) : (
+                <RotateCcw className="h-4 w-4 sm:mr-2" />
+              )}
+              <span className="hidden sm:inline">Restore</span>
+            </button>
+          )}
+          {canEdit && !isDeleted && (
             <button
               onClick={() => setIsDeleteDialogOpen(true)}
               className="btn-outline text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
             >
-            <Trash2 className="h-4 w-4 sm:mr-2" />
-            <span className="hidden sm:inline">Delete</span>
-          </button>
+              <Trash2 className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Delete</span>
+            </button>
           )}
         </div>
       </div>
