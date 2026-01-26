@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { User, Building2, Palette, Bell, Shield, Webhook, Plus, Trash2, Check, X, AlertTriangle, UserCog, ClipboardList, Phone, Mail, Calendar, FileText, RefreshCw, Upload, Camera, Sparkles } from 'lucide-react'
+import { User, Building2, Palette, Bell, Shield, Webhook, Plus, Trash2, Check, X, AlertTriangle, UserCog, ClipboardList, Phone, Mail, Calendar, FileText, RefreshCw, Upload, Camera, Sparkles, HelpCircle, ChevronDown, ChevronUp } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
@@ -18,6 +18,89 @@ const tabs = [
   { name: 'Security', icon: Shield },
   { name: 'Audit Log', icon: ClipboardList },
   { name: "What's New", icon: Sparkles },
+  { name: 'Help', icon: HelpCircle },
+]
+
+// Help documentation sections
+const helpSections = [
+  {
+    title: 'Getting Started',
+    items: [
+      {
+        question: 'How do I add my first client?',
+        answer: 'Navigate to the Clients page from the sidebar and click the "Add Client" button. Fill in the client details including name, email, company, and initial status. You can also add a value estimate for your pipeline.'
+      },
+      {
+        question: 'How do I create a workspace?',
+        answer: 'Click on the workspace selector in the top-left corner of the sidebar and select "Create Workspace". Give your workspace a name and it will be created immediately. You can then invite team members to collaborate.'
+      },
+    ]
+  },
+  {
+    title: 'Client Management',
+    items: [
+      {
+        question: 'How do I move clients through the pipeline?',
+        answer: 'Go to the Pipeline page to see your Kanban board. Drag and drop client cards between stages (Lead, Contacted, Proposal, Negotiation, Won, Lost). You can also change status from the client detail page.'
+      },
+      {
+        question: 'How do I log activities for a client?',
+        answer: 'Open a client\'s detail page and navigate to the Activity tab. Click "Log Activity" and select the type (call, email, meeting, note, or task). Add any relevant notes and save.'
+      },
+      {
+        question: 'How do I filter and search for clients?',
+        answer: 'Use the search bar at the top of any page (Ctrl+K for quick access). On the Clients page, you can also filter by status, sort by different criteria, and switch between list and grid views.'
+      },
+    ]
+  },
+  {
+    title: 'Projects & Tasks',
+    items: [
+      {
+        question: 'How do I create a project for a client?',
+        answer: 'Open the client detail page and go to the Projects tab. Click "Add Project" and fill in the project name, description, status, and dates. Projects help you track work associated with each client.'
+      },
+      {
+        question: 'How do I manage project tasks?',
+        answer: 'Open a project and you\'ll see the Tasks section. Click "Add Task" to create new tasks. You can check off completed tasks and filter by status.'
+      },
+    ]
+  },
+  {
+    title: 'Team Collaboration',
+    items: [
+      {
+        question: 'How do I invite team members?',
+        answer: 'Go to the Team page and click "Invite Member". Enter their email address and select their role (Admin, Member, or Viewer). They\'ll receive an email invitation to join your workspace.'
+      },
+      {
+        question: 'What are the different team roles?',
+        answer: 'Owner: Full control including workspace deletion. Admin: Can manage settings and team. Member: Can manage clients and projects. Viewer: Read-only access to data.'
+      },
+    ]
+  },
+  {
+    title: 'Dashboard & Reports',
+    items: [
+      {
+        question: 'How do I customize my dashboard?',
+        answer: 'Click the "Customize" button on the Dashboard page. You can show or hide different widgets like Statistics Cards, Recent Activity, and Pipeline Overview. Your preferences are saved automatically.'
+      },
+      {
+        question: 'How do I export reports?',
+        answer: 'Go to the Reports page and select your time range. Click "Export PDF" to generate a printable report with activity statistics, breakdown by type, and daily activity data.'
+      },
+    ]
+  },
+  {
+    title: 'Keyboard Shortcuts',
+    items: [
+      {
+        question: 'What keyboard shortcuts are available?',
+        answer: 'Press Ctrl+K (or Cmd+K on Mac) to open the Command Palette for quick navigation. Use arrow keys to navigate and Enter to select. You can quickly jump to any page or search for clients.'
+      },
+    ]
+  },
 ]
 
 // Release notes data
@@ -103,6 +186,9 @@ export function SettingsPage() {
   // Audit log state
   const [auditLogs, setAuditLogs] = useState<(Activity & { user_name?: string; client_name?: string })[]>([])
   const [auditLogsLoading, setAuditLogsLoading] = useState(false)
+
+  // Help expandable items state
+  const [expandedHelpItems, setExpandedHelpItems] = useState<Set<string>>(new Set())
 
   // Update workspace form when currentWorkspace changes
   useEffect(() => {
@@ -1344,6 +1430,80 @@ export function SettingsPage() {
                 <p className="text-sm text-slate-500 dark:text-slate-400">
                   Have feedback or feature requests? We'd love to hear from you! Contact us at{' '}
                   <a href="mailto:support@voostlevel.com" className="text-primary-600 dark:text-primary-400 hover:underline">
+                    support@voostlevel.com
+                  </a>
+                </p>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'Help' && (
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+                  Help & Documentation
+                </h2>
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  Find answers to common questions and learn how to use Voost Level
+                </p>
+              </div>
+
+              <div className="space-y-6">
+                {helpSections.map((section) => (
+                  <div key={section.title}>
+                    <h3 className="text-md font-semibold text-slate-900 dark:text-white mb-3">
+                      {section.title}
+                    </h3>
+                    <div className="space-y-2">
+                      {section.items.map((item, index) => {
+                        const itemKey = `${section.title}-${index}`
+                        const isExpanded = expandedHelpItems.has(itemKey)
+                        return (
+                          <div
+                            key={itemKey}
+                            className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden"
+                          >
+                            <button
+                              onClick={() => {
+                                const newExpanded = new Set(expandedHelpItems)
+                                if (isExpanded) {
+                                  newExpanded.delete(itemKey)
+                                } else {
+                                  newExpanded.add(itemKey)
+                                }
+                                setExpandedHelpItems(newExpanded)
+                              }}
+                              className="w-full flex items-center justify-between p-4 text-left hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+                            >
+                              <span className="font-medium text-slate-900 dark:text-white">
+                                {item.question}
+                              </span>
+                              {isExpanded ? (
+                                <ChevronUp className="h-5 w-5 text-slate-400 flex-shrink-0" />
+                              ) : (
+                                <ChevronDown className="h-5 w-5 text-slate-400 flex-shrink-0" />
+                              )}
+                            </button>
+                            {isExpanded && (
+                              <div className="px-4 pb-4 text-slate-600 dark:text-slate-300 text-sm">
+                                {item.answer}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-8 p-4 bg-primary-50 dark:bg-primary-900/20 rounded-lg border border-primary-200 dark:border-primary-800">
+                <h4 className="font-medium text-primary-900 dark:text-primary-100 mb-2">
+                  Need more help?
+                </h4>
+                <p className="text-sm text-primary-700 dark:text-primary-300">
+                  Can't find what you're looking for? Contact our support team at{' '}
+                  <a href="mailto:support@voostlevel.com" className="underline font-medium">
                     support@voostlevel.com
                   </a>
                 </p>
