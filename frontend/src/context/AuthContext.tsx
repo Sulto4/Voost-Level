@@ -26,47 +26,96 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Get initial session
+    let mounted = true
+    let initialCheckDone = false
+
+    // Listen for auth changes - this fires first
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        console.log('[AuthContext] Auth state changed:', event, session ? 'has session' : 'no session')
+        if (!mounted) return
+
+        setSession(session)
+        setUser(session?.user ?? null)
+
+        if (session?.user) {
+          // Fetch profile in background, don't block loading
+          fetchProfile(session.user.id)
+        } else {
+          setProfile(null)
+        }
+
+        // Set loading false immediately after auth state is known
+        if (!initialCheckDone) {
+          initialCheckDone = true
+          console.log('[AuthContext] Initial auth check done, setting loading=false')
+          setLoading(false)
+        } else {
+          console.log('[AuthContext] Auth change processed, setting loading=false')
+          setLoading(false)
+        }
+      }
+    )
+
+    // Get initial session - this triggers onAuthStateChange with INITIAL_SESSION
+    console.log('[AuthContext] Getting initial session...')
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session)
-      setUser(session?.user ?? null)
-      if (session?.user) {
-        fetchProfile(session.user.id)
-      } else {
+      console.log('[AuthContext] Got session:', session ? 'exists' : 'null')
+      // If no auth state change was fired yet (no session), set loading false
+      if (!initialCheckDone && !session) {
+        initialCheckDone = true
+        setLoading(false)
+      }
+    }).catch((error) => {
+      console.error('[AuthContext] Error getting session:', error)
+      if (!initialCheckDone) {
+        initialCheckDone = true
         setLoading(false)
       }
     })
 
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        setSession(session)
-        setUser(session?.user ?? null)
-        if (session?.user) {
-          await fetchProfile(session.user.id)
-        } else {
-          setProfile(null)
-        }
+    // Failsafe timeout - if nothing resolves in 5 seconds, stop loading
+    const timeout = setTimeout(() => {
+      if (!initialCheckDone && mounted) {
+        console.warn('[AuthContext] Timeout reached, forcing loading=false')
+        initialCheckDone = true
         setLoading(false)
       }
-    )
+    }, 5000)
 
-    return () => subscription.unsubscribe()
+    return () => {
+      mounted = false
+      subscription.unsubscribe()
+      clearTimeout(timeout)
+    }
   }, [])
 
   async function fetchProfile(userId: string) {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single()
+    console.log('[AuthContext] Fetching profile for user:', userId)
+    try {
+      // Add a timeout to prevent hanging
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Profile fetch timeout')), 10000)
+      })
 
-    if (error) {
-      console.error('Error fetching profile:', error)
-    } else {
-      setProfile(data)
+      const fetchPromise = supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single()
+
+      const { data, error } = await Promise.race([fetchPromise, timeoutPromise]) as Awaited<typeof fetchPromise>
+
+      console.log('[AuthContext] Profile fetch result:', { data: data ? 'found' : 'null', error })
+      if (error) {
+        console.error('Error fetching profile:', error)
+      } else {
+        setProfile(data)
+      }
+    } catch (err) {
+      console.error('Exception fetching profile:', err)
     }
-    setLoading(false)
+    console.log('[AuthContext] fetchProfile completed')
   }
 
   async function signIn(email: string, password: string) {

@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Search, Filter, MoreHorizontal, Building2, Mail, Phone } from 'lucide-react'
+import { Plus, Search, Filter, MoreHorizontal, Building2, Mail, Phone, ChevronLeft, ChevronRight } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import { AddClientModal } from '../../components/clients/AddClientModal'
 import type { Client } from '../../types/database'
+
+const ITEMS_PER_PAGE = 20
 
 export function ClientsPage() {
   const { currentWorkspace } = useWorkspace()
@@ -12,22 +14,47 @@ export function ClientsPage() {
   const [clients, setClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalCount, setTotalCount] = useState(0)
 
   useEffect(() => {
     if (currentWorkspace) {
       fetchClients()
     }
-  }, [currentWorkspace])
+  }, [currentWorkspace, currentPage])
+
+  // Reset to page 1 when search query changes
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchQuery])
 
   async function fetchClients() {
     if (!currentWorkspace) return
 
     setLoading(true)
+
+    // First get the total count
+    const { count, error: countError } = await supabase
+      .from('clients')
+      .select('*', { count: 'exact', head: true })
+      .eq('workspace_id', currentWorkspace.id)
+
+    if (countError) {
+      console.error('Error fetching client count:', countError)
+    } else {
+      setTotalCount(count || 0)
+    }
+
+    // Then fetch the paginated data
+    const from = (currentPage - 1) * ITEMS_PER_PAGE
+    const to = from + ITEMS_PER_PAGE - 1
+
     const { data, error } = await supabase
       .from('clients')
       .select('*')
       .eq('workspace_id', currentWorkspace.id)
       .order('created_at', { ascending: false })
+      .range(from, to)
 
     if (error) {
       console.error('Error fetching clients:', error)
@@ -46,6 +73,25 @@ export function ClientsPage() {
       client.source?.toLowerCase().includes(query)
     )
   })
+
+  // Pagination calculations
+  const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE)
+  const hasNextPage = currentPage < totalPages
+  const hasPreviousPage = currentPage > 1
+  const startItem = totalCount === 0 ? 0 : (currentPage - 1) * ITEMS_PER_PAGE + 1
+  const endItem = Math.min(currentPage * ITEMS_PER_PAGE, totalCount)
+
+  function goToNextPage() {
+    if (hasNextPage) {
+      setCurrentPage(currentPage + 1)
+    }
+  }
+
+  function goToPreviousPage() {
+    if (hasPreviousPage) {
+      setCurrentPage(currentPage - 1)
+    }
+  }
 
   const statusColors: Record<string, string> = {
     lead: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
@@ -204,6 +250,38 @@ export function ClientsPage() {
               ))}
             </tbody>
           </table>
+
+          {/* Pagination Controls */}
+          {totalCount > ITEMS_PER_PAGE && (
+            <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">
+              <div className="text-sm text-slate-500 dark:text-slate-400">
+                Showing <span className="font-medium">{startItem}</span> to{' '}
+                <span className="font-medium">{endItem}</span> of{' '}
+                <span className="font-medium">{totalCount}</span> clients
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={goToPreviousPage}
+                  disabled={!hasPreviousPage}
+                  className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  aria-label="Previous page"
+                >
+                  <ChevronLeft className="h-5 w-5" />
+                </button>
+                <span className="text-sm text-slate-600 dark:text-slate-300 px-2">
+                  Page {currentPage} of {totalPages}
+                </span>
+                <button
+                  onClick={goToNextPage}
+                  disabled={!hasNextPage}
+                  className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  aria-label="Next page"
+                >
+                  <ChevronRight className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
