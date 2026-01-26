@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo } from 'react'
-import { BarChart3, TrendingUp, Activity, Calendar, ChevronDown } from 'lucide-react'
+import { useState, useEffect, useMemo, useRef } from 'react'
+import { BarChart3, TrendingUp, Activity, Calendar, ChevronDown, Download, FileText } from 'lucide-react'
 import { clsx } from 'clsx'
 import { supabase } from '../lib/supabase'
 import { useWorkspace } from '../context/WorkspaceContext'
@@ -20,6 +20,7 @@ export function ReportsPage() {
   const [activities, setActivities] = useState<ActivityType[]>([])
   const [timeRange, setTimeRange] = useState<TimeRange>('30d')
   const [isTimeRangeDropdownOpen, setIsTimeRangeDropdownOpen] = useState(false)
+  const reportRef = useRef<HTMLDivElement>(null)
 
   const timeRangeOptions: { value: TimeRange; label: string; days: number }[] = [
     { value: '7d', label: 'Last 7 days', days: 7 },
@@ -166,6 +167,166 @@ export function ReportsPage() {
     status_change: 'Status Changes',
   }
 
+  // Export report to PDF using browser print
+  function handleExportPDF() {
+    // Create a new window for printing
+    const printWindow = window.open('', '_blank')
+    if (!printWindow) {
+      alert('Please allow pop-ups to export the report')
+      return
+    }
+
+    // Generate date range string
+    const endDate = new Date()
+    const startDate = new Date()
+    startDate.setDate(startDate.getDate() - selectedTimeRange.days)
+    const dateRangeStr = `${startDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })} - ${endDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`
+
+    // Build activity breakdown HTML
+    const breakdownRows = (Object.entries(activityBreakdown) as [ActivityTypeEnum, number][])
+      .filter(([_, count]) => count > 0)
+      .sort((a, b) => b[1] - a[1])
+      .map(([type, count]) => {
+        const percentage = totalActivities > 0 ? ((count / totalActivities) * 100).toFixed(1) : '0'
+        return `
+          <tr>
+            <td style="padding: 8px; border-bottom: 1px solid #e2e8f0;">${activityTypeLabels[type]}</td>
+            <td style="padding: 8px; border-bottom: 1px solid #e2e8f0; text-align: right;">${count}</td>
+            <td style="padding: 8px; border-bottom: 1px solid #e2e8f0; text-align: right;">${percentage}%</td>
+          </tr>
+        `
+      })
+      .join('')
+
+    // Build daily activity table
+    const dailyRows = trendData
+      .filter(day => day.total > 0)
+      .map(day => `
+        <tr>
+          <td style="padding: 8px; border-bottom: 1px solid #e2e8f0;">${day.label}</td>
+          <td style="padding: 8px; border-bottom: 1px solid #e2e8f0; text-align: right;">${day.total}</td>
+        </tr>
+      `)
+      .join('')
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Activity Report - ${currentWorkspace?.name || 'Workspace'}</title>
+          <style>
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+              max-width: 800px;
+              margin: 0 auto;
+              padding: 40px 20px;
+              color: #1e293b;
+            }
+            h1 { color: #0f172a; margin-bottom: 8px; }
+            h2 { color: #334155; margin-top: 32px; margin-bottom: 16px; }
+            .subtitle { color: #64748b; margin-bottom: 24px; }
+            .stats-grid {
+              display: grid;
+              grid-template-columns: repeat(3, 1fr);
+              gap: 16px;
+              margin-bottom: 32px;
+            }
+            .stat-card {
+              background: #f8fafc;
+              padding: 16px;
+              border-radius: 8px;
+              border: 1px solid #e2e8f0;
+            }
+            .stat-label { color: #64748b; font-size: 14px; }
+            .stat-value { font-size: 24px; font-weight: bold; color: #0f172a; }
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              margin-bottom: 24px;
+            }
+            th {
+              text-align: left;
+              padding: 12px 8px;
+              background: #f1f5f9;
+              border-bottom: 2px solid #e2e8f0;
+              font-weight: 600;
+            }
+            th:last-child, th:nth-child(2) { text-align: right; }
+            .footer {
+              margin-top: 40px;
+              padding-top: 16px;
+              border-top: 1px solid #e2e8f0;
+              color: #64748b;
+              font-size: 12px;
+            }
+            @media print {
+              body { padding: 20px; }
+              .stat-card { break-inside: avoid; }
+            }
+          </style>
+        </head>
+        <body>
+          <h1>Activity Report</h1>
+          <p class="subtitle">${currentWorkspace?.name || 'Workspace'} | ${dateRangeStr}</p>
+
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-label">Total Activities</div>
+              <div class="stat-value">${totalActivities}</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Avg. per Day</div>
+              <div class="stat-value">${averagePerDay}</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Peak Day</div>
+              <div class="stat-value">${maxDayActivities}</div>
+            </div>
+          </div>
+
+          <h2>Activity Breakdown by Type</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Type</th>
+                <th>Count</th>
+                <th>Percentage</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${breakdownRows || '<tr><td colspan="3" style="padding: 16px; text-align: center; color: #64748b;">No activities</td></tr>'}
+            </tbody>
+          </table>
+
+          <h2>Daily Activity</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Activities</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${dailyRows || '<tr><td colspan="2" style="padding: 16px; text-align: center; color: #64748b;">No activities</td></tr>'}
+            </tbody>
+          </table>
+
+          <div class="footer">
+            Generated by Voost Level on ${new Date().toLocaleString()}
+          </div>
+        </body>
+      </html>
+    `
+
+    printWindow.document.write(html)
+    printWindow.document.close()
+
+    // Wait for content to load then trigger print
+    printWindow.onload = () => {
+      printWindow.print()
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -179,41 +340,54 @@ export function ReportsPage() {
           </p>
         </div>
 
-        {/* Time Range Selector */}
-        <div className="relative">
+        {/* Actions */}
+        <div className="flex items-center gap-2">
+          {/* Export PDF Button */}
           <button
-            onClick={() => setIsTimeRangeDropdownOpen(!isTimeRangeDropdownOpen)}
+            onClick={handleExportPDF}
+            disabled={loading}
             className="btn-outline flex items-center gap-2"
           >
-            <Calendar className="h-4 w-4" />
-            {selectedTimeRange.label}
-            <ChevronDown className={clsx(
-              'h-4 w-4 transition-transform',
-              isTimeRangeDropdownOpen && 'rotate-180'
-            )} />
+            <FileText className="h-4 w-4" />
+            <span className="hidden sm:inline">Export PDF</span>
           </button>
 
-          {isTimeRangeDropdownOpen && (
-            <div className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg z-50">
-              {timeRangeOptions.map(option => (
-                <button
-                  key={option.value}
-                  onClick={() => {
-                    setTimeRange(option.value)
-                    setIsTimeRangeDropdownOpen(false)
-                  }}
-                  className={clsx(
-                    'w-full text-left px-4 py-2.5 text-sm transition-colors first:rounded-t-lg last:rounded-b-lg',
-                    timeRange === option.value
-                      ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300'
-                      : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
-                  )}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-          )}
+          {/* Time Range Selector */}
+          <div className="relative">
+            <button
+              onClick={() => setIsTimeRangeDropdownOpen(!isTimeRangeDropdownOpen)}
+              className="btn-outline flex items-center gap-2"
+            >
+              <Calendar className="h-4 w-4" />
+              {selectedTimeRange.label}
+              <ChevronDown className={clsx(
+                'h-4 w-4 transition-transform',
+                isTimeRangeDropdownOpen && 'rotate-180'
+              )} />
+            </button>
+
+            {isTimeRangeDropdownOpen && (
+              <div className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg z-50">
+                {timeRangeOptions.map(option => (
+                  <button
+                    key={option.value}
+                    onClick={() => {
+                      setTimeRange(option.value)
+                      setIsTimeRangeDropdownOpen(false)
+                    }}
+                    className={clsx(
+                      'w-full text-left px-4 py-2.5 text-sm transition-colors first:rounded-t-lg last:rounded-b-lg',
+                      timeRange === option.value
+                        ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300'
+                        : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
+                    )}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
