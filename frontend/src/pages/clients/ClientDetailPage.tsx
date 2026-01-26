@@ -390,9 +390,10 @@ export function ClientDetailPage() {
     if (!client) return
 
     setDeleting(true)
+    // Soft delete by setting deleted_at timestamp
     const { error } = await supabase
       .from('clients')
-      .delete()
+      .update({ deleted_at: new Date().toISOString() })
       .eq('id', client.id)
 
     if (error) {
