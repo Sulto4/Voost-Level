@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner'
 
@@ -10,8 +10,8 @@ export function RegisterPage() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [success, setSuccess] = useState(false)
   const { signUp } = useAuth()
-  const navigate = useNavigate()
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -34,8 +34,38 @@ export function RegisterPage() {
       setError(error.message || 'Failed to create account')
       setLoading(false)
     } else {
-      navigate('/dashboard')
+      setSuccess(true)
+      setLoading(false)
     }
+  }
+
+  if (success) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-background-dark px-4">
+        <div className="w-full max-w-md">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl p-8 text-center">
+            <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-6">
+              <svg className="w-8 h-8 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">
+              Check your email
+            </h1>
+            <p className="text-slate-500 dark:text-slate-400 mb-6">
+              We've sent a confirmation link to <strong className="text-slate-700 dark:text-slate-300">{email}</strong>.
+              Please check your inbox and click the link to verify your account.
+            </p>
+            <Link
+              to="/login"
+              className="inline-block btn-primary px-6 py-3"
+            >
+              Go to Sign In
+            </Link>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
