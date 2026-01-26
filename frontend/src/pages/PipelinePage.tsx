@@ -216,23 +216,21 @@ export function PipelinePage() {
       // Revert on error
       fetchPipelineData()
     } else {
-      // Log the status change as an activity
-      if (newStatus !== draggedClient.status) {
-        await supabase
-          .from('activities')
-          .insert({
-            client_id: draggedClient.id,
-            user_id: user.id,
-            type: 'status_change',
-            content: `Moved to ${targetStage.name}`,
-            metadata: {
-              from_stage: sourceStage.name,
-              to_stage: targetStage.name,
-              from_status: draggedClient.status,
-              to_status: newStatus
-            }
-          })
-      }
+      // Log the pipeline stage change as an activity
+      await supabase
+        .from('activities')
+        .insert({
+          client_id: draggedClient.id,
+          user_id: user.id,
+          type: 'status_change',
+          content: `Moved from ${sourceStage.name} to ${targetStage.name}`,
+          metadata: {
+            from_stage: sourceStage.name,
+            to_stage: targetStage.name,
+            from_status: draggedClient.status,
+            to_status: newStatus
+          }
+        })
     }
 
     setDraggedClient(null)
