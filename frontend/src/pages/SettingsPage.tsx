@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { User, Building2, Palette, Bell, Shield, Webhook, Plus, Trash2, Check, X, AlertTriangle, UserCog } from 'lucide-react'
+import { User, Building2, Palette, Bell, Shield, Webhook, Plus, Trash2, Check, X, AlertTriangle, UserCog, ClipboardList, Phone, Mail, Calendar, FileText, RefreshCw } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 import { useWorkspace } from '../context/WorkspaceContext'
+import { useToast } from '../context/ToastContext'
 import { supabase } from '../lib/supabase'
-import type { Webhook as WebhookType, WorkspaceMember } from '../types/database'
+import type { Webhook as WebhookType, WorkspaceMember, Activity } from '../types/database'
 
 const tabs = [
   { name: 'Profile', icon: User },
@@ -15,6 +16,7 @@ const tabs = [
   { name: 'Notifications', icon: Bell },
   { name: 'Integrations', icon: Webhook },
   { name: 'Security', icon: Shield },
+  { name: 'Audit Log', icon: ClipboardList },
 ]
 
 const webhookEvents = [
@@ -34,6 +36,7 @@ export function SettingsPage() {
   const { profile, updateProfile, user } = useAuth()
   const { theme, setTheme } = useTheme()
   const { currentWorkspace, currentRole, updateWorkspace, deleteWorkspace, refreshWorkspaces } = useWorkspace()
+  const { success: showSuccess, error: showError } = useToast()
 
   const [fullName, setFullName] = useState(profile?.full_name || '')
   const [saving, setSaving] = useState(false)
@@ -66,6 +69,10 @@ export function SettingsPage() {
   const [transferring, setTransferring] = useState(false)
   const [transferError, setTransferError] = useState('')
 
+  // Audit log state
+  const [auditLogs, setAuditLogs] = useState<(Activity & { user_name?: string; client_name?: string })[]>([])
+  const [auditLogsLoading, setAuditLogsLoading] = useState(false)
+
   // Update workspace form when currentWorkspace changes
   useEffect(() => {
     if (currentWorkspace) {
@@ -81,6 +88,13 @@ export function SettingsPage() {
     }
   }, [currentWorkspace])
 
+  // Fetch audit logs when tab changes to Audit Log
+  useEffect(() => {
+    if (activeTab === 'Audit Log' && currentWorkspace) {
+      fetchAuditLogs()
+    }
+  }, [activeTab, currentWorkspace])
+
   async function fetchWebhooks() {
     if (!currentWorkspace) return
     setWebhooksLoading(true)
@@ -91,6 +105,47 @@ export function SettingsPage() {
       .order('created_at', { ascending: false })
     setWebhooks(data || [])
     setWebhooksLoading(false)
+  }
+
+  async function fetchAuditLogs() {
+    if (!currentWorkspace) return
+    setAuditLogsLoading(true)
+
+    // First get all clients for this workspace
+    const { data: clients } = await supabase
+      .from('clients')
+      .select('id, name')
+      .eq('workspace_id', currentWorkspace.id)
+
+    const clientIds = clients?.map(c => c.id) || []
+    const clientMap = new Map(clients?.map(c => [c.id, c.name]) || [])
+
+    if (clientIds.length === 0) {
+      setAuditLogs([])
+      setAuditLogsLoading(false)
+      return
+    }
+
+    // Fetch activities for these clients with user info
+    const { data: activities } = await supabase
+      .from('activities')
+      .select(`
+        *,
+        user:profiles!activities_user_id_fkey(full_name, email)
+      `)
+      .in('client_id', clientIds)
+      .order('created_at', { ascending: false })
+      .limit(100)
+
+    const logsWithNames = (activities || []).map(activity => ({
+      ...activity,
+      user_name: (activity.user as { full_name?: string; email?: string })?.full_name ||
+                 (activity.user as { full_name?: string; email?: string })?.email || 'Unknown',
+      client_name: clientMap.get(activity.client_id) || 'Unknown Client'
+    }))
+
+    setAuditLogs(logsWithNames)
+    setAuditLogsLoading(false)
   }
 
   async function handleAddWebhook() {
@@ -220,7 +275,12 @@ export function SettingsPage() {
 
   async function handleProfileSave() {
     setSaving(true)
-    await updateProfile({ full_name: fullName })
+    const { error } = await updateProfile({ full_name: fullName })
+    if (error) {
+      showError('Failed to update profile')
+    } else {
+      showSuccess('Profile updated successfully')
+    }
     setSaving(false)
   }
 
@@ -238,8 +298,10 @@ export function SettingsPage() {
 
     if (error) {
       setWorkspaceError(error.message || 'Failed to update workspace')
+      showError('Failed to update workspace')
     } else {
       setWorkspaceSuccess(true)
+      showSuccess('Workspace updated successfully')
       setTimeout(() => setWorkspaceSuccess(false), 3000)
     }
 
@@ -821,7 +883,128 @@ export function SettingsPage() {
               </div>
             </div>
           )}
+
+          {activeTab === 'Audit Log' && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+                    Audit Log
+                  </h2>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    View recent changes and activities in your workspace
+                  </p>
+                </div>
+                <button
+                  onClick={fetchAuditLogs}
+                  className="btn-outline min-h-[44px]"
+                  disabled={auditLogsLoading}
+                >
+                  <RefreshCw className={clsx('h-4 w-4 mr-2', auditLogsLoading && 'animate-spin')} />
+                  Refresh
+                </button>
+              </div>
+
+              {auditLogsLoading ? (
+                <div className="text-center py-12">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+                  <p className="text-slate-500 dark:text-slate-400 mt-2">Loading audit logs...</p>
+                </div>
+              ) : auditLogs.length === 0 ? (
+                <div className="text-center py-12 text-slate-500 dark:text-slate-400">
+                  <ClipboardList className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                  <p>No activity logs found</p>
+                  <p className="text-sm">Activities will appear here when team members interact with clients</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {auditLogs.map((log) => {
+                    const getActivityIcon = (type: string) => {
+                      switch (type) {
+                        case 'call': return <Phone className="h-4 w-4" />
+                        case 'email': return <Mail className="h-4 w-4" />
+                        case 'meeting': return <Calendar className="h-4 w-4" />
+                        case 'note': return <FileText className="h-4 w-4" />
+                        case 'status_change': return <RefreshCw className="h-4 w-4" />
+                        default: return <ClipboardList className="h-4 w-4" />
+                      }
+                    }
+
+                    const getActivityColor = (type: string) => {
+                      switch (type) {
+                        case 'call': return 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'
+                        case 'email': return 'bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400'
+                        case 'meeting': return 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400'
+                        case 'note': return 'bg-yellow-100 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-400'
+                        case 'status_change': return 'bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400'
+                        default: return 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400'
+                      }
+                    }
+
+                    const formatDate = (dateString: string) => {
+                      const date = new Date(dateString)
+                      return date.toLocaleString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })
+                    }
+
+                    return (
+                      <div
+                        key={log.id}
+                        className="card p-4 flex items-start gap-4"
+                      >
+                        <div className={clsx(
+                          'p-2 rounded-lg flex-shrink-0',
+                          getActivityColor(log.type)
+                        )}>
+                          {getActivityIcon(log.type)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-medium text-slate-900 dark:text-white">
+                              {log.user_name}
+                            </span>
+                            <span className="text-slate-500 dark:text-slate-400">
+                              logged a {log.type.replace('_', ' ')} for
+                            </span>
+                            <span className="font-medium text-primary-600 dark:text-primary-400">
+                              {log.client_name}
+                            </span>
+                          </div>
+                          {log.content && (
+                            <p className="text-sm text-slate-600 dark:text-slate-300 mt-1 line-clamp-2">
+                              {log.content}
+                            </p>
+                          )}
+                          <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+                            {formatDate(log.created_at)}
+                          </p>
+                        </div>
+                        <div className="flex-shrink-0">
+                          <span className={clsx(
+                            'px-2 py-1 text-xs rounded-full capitalize',
+                            getActivityColor(log.type)
+                          )}>
+                            {log.type.replace('_', ' ')}
+                          </span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </div>
+      </div>
+
+      {/* App Version Footer */}
+      <div className="text-center text-sm text-slate-400 dark:text-slate-500 pt-4 border-t border-slate-200 dark:border-slate-700">
+        <p>Voost Level v0.1.0</p>
       </div>
     </div>
   )

@@ -249,20 +249,32 @@ export function ProjectsPage() {
         </div>
       )}
 
-      {/* Project Stats */}
+      {/* Project Stats - Report showing projects by status */}
       {projects.length > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
           <div className="card p-4">
             <p className="text-sm text-slate-500 dark:text-slate-400">Total Projects</p>
             <p className="text-2xl font-bold text-slate-900 dark:text-white">{projects.length}</p>
+          </div>
+          <div className="card p-4">
+            <p className="text-sm text-slate-500 dark:text-slate-400">Planning</p>
+            <p className="text-2xl font-bold text-slate-600 dark:text-slate-300">{projects.filter(p => p.status === 'planning').length}</p>
           </div>
           <div className="card p-4">
             <p className="text-sm text-slate-500 dark:text-slate-400">In Progress</p>
             <p className="text-2xl font-bold text-blue-600">{projects.filter(p => p.status === 'in_progress').length}</p>
           </div>
           <div className="card p-4">
+            <p className="text-sm text-slate-500 dark:text-slate-400">Review</p>
+            <p className="text-2xl font-bold text-yellow-600">{projects.filter(p => p.status === 'review').length}</p>
+          </div>
+          <div className="card p-4">
             <p className="text-sm text-slate-500 dark:text-slate-400">Completed</p>
             <p className="text-2xl font-bold text-green-600">{projects.filter(p => p.status === 'completed').length}</p>
+          </div>
+          <div className="card p-4">
+            <p className="text-sm text-slate-500 dark:text-slate-400">Cancelled</p>
+            <p className="text-2xl font-bold text-red-600">{projects.filter(p => p.status === 'cancelled').length}</p>
           </div>
           <div className="card p-4">
             <p className="text-sm text-slate-500 dark:text-slate-400">Total Budget</p>
