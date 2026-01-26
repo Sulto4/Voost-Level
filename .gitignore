@@ -1,0 +1,55 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+
+# Environment files (local overrides)
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Test coverage
+coverage/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Database files (development)
+*.db
+*.sqlite
+*.sqlite3
+
+# Feature tracking databases (keep in repo for continuity)
+!features.db
+!deployment_checklist.db
+
+# Cache
+.cache/
+.eslintcache
+.stylelintcache
+
+# Supabase
+.supabase/
