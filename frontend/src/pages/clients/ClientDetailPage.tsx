@@ -127,47 +127,47 @@ export function ClientDetailPage() {
       />
 
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-4">
-          <div className="h-12 w-12 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center text-primary-600 dark:text-primary-400 font-bold text-xl">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex items-center space-x-4 min-w-0">
+          <div className="h-12 w-12 flex-shrink-0 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center text-primary-600 dark:text-primary-400 font-bold text-xl">
             {client.name[0].toUpperCase()}
           </div>
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
+          <div className="min-w-0">
+            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white truncate">
               {client.name}
             </h1>
             {client.company && (
-              <p className="text-slate-500 dark:text-slate-400">{client.company}</p>
+              <p className="text-slate-500 dark:text-slate-400 truncate">{client.company}</p>
             )}
           </div>
         </div>
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-2 flex-shrink-0">
           <button
             onClick={() => setIsEditModalOpen(true)}
             className="btn-outline"
           >
-            <Edit className="h-4 w-4 mr-2" />
-            Edit
+            <Edit className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Edit</span>
           </button>
           <button
             onClick={() => setIsDeleteDialogOpen(true)}
             className="btn-outline text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
           >
-            <Trash2 className="h-4 w-4 mr-2" />
-            Delete
+            <Trash2 className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Delete</span>
           </button>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-slate-200 dark:border-slate-700">
-        <nav className="flex space-x-8">
+      <div className="border-b border-slate-200 dark:border-slate-700 overflow-x-auto">
+        <nav className="flex space-x-4 sm:space-x-8 min-w-max">
           {tabs.map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
               className={clsx(
-                'py-4 px-1 border-b-2 font-medium text-sm transition-colors',
+                'py-4 px-1 border-b-2 font-medium text-sm transition-colors whitespace-nowrap',
                 activeTab === tab
                   ? 'border-primary-500 text-primary-600 dark:text-primary-400'
                   : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'

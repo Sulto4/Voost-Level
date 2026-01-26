@@ -1,16 +1,139 @@
-import { useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, Edit, Trash2, Plus, CheckSquare } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { useParams, Link, useNavigate } from 'react-router-dom'
+import { ArrowLeft, Edit, Trash2, Plus, CheckSquare, Calendar, DollarSign, Building2, AlertCircle } from 'lucide-react'
 import { clsx } from 'clsx'
+import { supabase } from '../../lib/supabase'
+import { EditProjectModal } from '../../components/projects/EditProjectModal'
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
+import { AddTaskModal } from '../../components/tasks/AddTaskModal'
+import { EditTaskModal } from '../../components/tasks/EditTaskModal'
+import type { Project, Client, Task } from '../../types/database'
+
+interface ProjectWithClient extends Project {
+  clients: Pick<Client, 'id' | 'name' | 'company'> | null
+}
 
 const tabs = ['Overview', 'Tasks', 'Files']
 
 export function ProjectDetailPage() {
   const { id } = useParams()
+  const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState('Overview')
+  const [project, setProject] = useState<ProjectWithClient | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false)
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [isAddTaskModalOpen, setIsAddTaskModalOpen] = useState(false)
+  const [isEditTaskModalOpen, setIsEditTaskModalOpen] = useState(false)
+  const [isDeleteTaskDialogOpen, setIsDeleteTaskDialogOpen] = useState(false)
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null)
+  const [deletingTask, setDeletingTask] = useState(false)
+  const [tasks, setTasks] = useState<Task[]>([])
+  const [tasksLoading, setTasksLoading] = useState(false)
 
-  // This would come from API
-  const project = null
+  useEffect(() => {
+    if (id) {
+      fetchProject()
+      fetchTasks()
+    }
+  }, [id])
+
+  async function fetchProject() {
+    setLoading(true)
+    const { data, error } = await supabase
+      .from('projects')
+      .select(`
+        *,
+        clients (
+          id,
+          name,
+          company
+        )
+      `)
+      .eq('id', id)
+      .single()
+
+    if (error) {
+      console.error('Error fetching project:', error)
+      setProject(null)
+    } else {
+      setProject(data)
+    }
+    setLoading(false)
+  }
+
+  async function fetchTasks() {
+    if (!id) return
+    setTasksLoading(true)
+    const { data, error } = await supabase
+      .from('tasks')
+      .select('*')
+      .eq('project_id', id)
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      console.error('Error fetching tasks:', error)
+    } else {
+      setTasks(data || [])
+    }
+    setTasksLoading(false)
+  }
+
+  async function handleDelete() {
+    if (!project) return
+
+    setDeleting(true)
+    const { error } = await supabase
+      .from('projects')
+      .delete()
+      .eq('id', project.id)
+
+    if (error) {
+      console.error('Error deleting project:', error)
+      setDeleting(false)
+    } else {
+      // Navigate back to projects list
+      navigate('/projects')
+    }
+  }
+
+  async function handleDeleteTask() {
+    if (!selectedTask) return
+
+    setDeletingTask(true)
+    const { error } = await supabase
+      .from('tasks')
+      .delete()
+      .eq('id', selectedTask.id)
+
+    if (error) {
+      console.error('Error deleting task:', error)
+      setDeletingTask(false)
+    } else {
+      setDeletingTask(false)
+      setIsDeleteTaskDialogOpen(false)
+      setSelectedTask(null)
+      fetchTasks()
+    }
+  }
+
+  const statusColors: Record<string, string> = {
+    planning: 'bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-300',
+    in_progress: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
+    review: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
+    completed: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
+    cancelled: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
+  }
+
+  if (loading) {
+    return (
+      <div className="text-center py-12">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+        <p className="mt-4 text-slate-500 dark:text-slate-400">Loading project...</p>
+      </div>
+    )
+  }
 
   if (!project) {
     return (
@@ -32,42 +155,61 @@ export function ProjectDetailPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex items-center space-x-4 min-w-0">
           <Link
             to="/projects"
-            className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+            className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors flex-shrink-0"
           >
             <ArrowLeft className="h-5 w-5 text-slate-500" />
           </Link>
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-              Project Name
+          <div className="min-w-0">
+            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white truncate">
+              {project.name}
             </h1>
-            <p className="text-slate-500 dark:text-slate-400">Client Name</p>
+            {project.clients && (
+              <Link
+                to={`/clients/${project.clients.id}`}
+                className="text-slate-500 dark:text-slate-400 hover:text-primary-600 dark:hover:text-primary-400 flex items-center text-sm truncate"
+              >
+                {project.clients.company && (
+                  <>
+                    <Building2 className="h-4 w-4 mr-1 flex-shrink-0" />
+                    <span className="truncate">{project.clients.company} • {project.clients.name}</span>
+                  </>
+                )}
+                {!project.clients.company && project.clients.name}
+              </Link>
+            )}
           </div>
         </div>
-        <div className="flex items-center space-x-2">
-          <button className="btn-outline">
-            <Edit className="h-4 w-4 mr-2" />
-            Edit
+        <div className="flex items-center space-x-2 flex-shrink-0">
+          <button
+            onClick={() => setIsEditModalOpen(true)}
+            className="btn-outline"
+          >
+            <Edit className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Edit</span>
           </button>
-          <button className="btn-outline text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20">
-            <Trash2 className="h-4 w-4 mr-2" />
-            Delete
+          <button
+            onClick={() => setIsDeleteDialogOpen(true)}
+            className="btn-outline text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+          >
+            <Trash2 className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Delete</span>
           </button>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-slate-200 dark:border-slate-700">
-        <nav className="flex space-x-8">
+      <div className="border-b border-slate-200 dark:border-slate-700 overflow-x-auto">
+        <nav className="flex space-x-4 sm:space-x-8 min-w-max">
           {tabs.map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
               className={clsx(
-                'py-4 px-1 border-b-2 font-medium text-sm transition-colors',
+                'py-4 px-1 border-b-2 font-medium text-sm transition-colors whitespace-nowrap',
                 activeTab === tab
                   ? 'border-primary-500 text-primary-600 dark:text-primary-400'
                   : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'
@@ -92,20 +234,82 @@ export function ProjectDetailPage() {
                   <div>
                     <dt className="text-sm text-slate-500 dark:text-slate-400">Status</dt>
                     <dd className="mt-1">
-                      <span className="badge-primary">Planning</span>
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${statusColors[project.status]}`}>
+                        {project.status.replace('_', ' ')}
+                      </span>
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-sm text-slate-500 dark:text-slate-400">Client</dt>
+                    <dd className="text-slate-900 dark:text-white">
+                      {project.clients ? (
+                        <Link
+                          to={`/clients/${project.clients.id}`}
+                          className="hover:text-primary-600 dark:hover:text-primary-400"
+                        >
+                          {project.clients.name}
+                        </Link>
+                      ) : (
+                        <span className="text-slate-400 italic">No client assigned</span>
+                      )}
                     </dd>
                   </div>
                   <div>
                     <dt className="text-sm text-slate-500 dark:text-slate-400">Start Date</dt>
-                    <dd className="text-slate-900 dark:text-white">-</dd>
+                    <dd className="text-slate-900 dark:text-white flex items-center">
+                      {project.start_date ? (
+                        <>
+                          <Calendar className="h-4 w-4 mr-1 text-slate-400" />
+                          {new Date(project.start_date).toLocaleDateString('en-US', {
+                            month: 'long',
+                            day: 'numeric',
+                            year: 'numeric',
+                          })}
+                        </>
+                      ) : (
+                        <span className="text-slate-400 italic">Not set</span>
+                      )}
+                    </dd>
                   </div>
                   <div>
                     <dt className="text-sm text-slate-500 dark:text-slate-400">Due Date</dt>
-                    <dd className="text-slate-900 dark:text-white">-</dd>
+                    <dd className="text-slate-900 dark:text-white flex items-center">
+                      {project.due_date ? (
+                        <>
+                          <Calendar className="h-4 w-4 mr-1 text-slate-400" />
+                          {new Date(project.due_date).toLocaleDateString('en-US', {
+                            month: 'long',
+                            day: 'numeric',
+                            year: 'numeric',
+                          })}
+                        </>
+                      ) : (
+                        <span className="text-slate-400 italic">Not set</span>
+                      )}
+                    </dd>
                   </div>
                   <div>
                     <dt className="text-sm text-slate-500 dark:text-slate-400">Budget</dt>
-                    <dd className="text-slate-900 dark:text-white">$0</dd>
+                    <dd className="text-slate-900 dark:text-white flex items-center">
+                      {project.budget ? (
+                        <>
+                          <DollarSign className="h-4 w-4 mr-0.5 text-slate-400" />
+                          {project.budget.toLocaleString()}
+                        </>
+                      ) : (
+                        <span className="text-slate-400 italic">Not set</span>
+                      )}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-sm text-slate-500 dark:text-slate-400">Created</dt>
+                    <dd className="text-slate-900 dark:text-white">
+                      {new Date(project.created_at).toLocaleDateString('en-US', {
+                        month: 'long',
+                        day: 'numeric',
+                        year: 'numeric',
+                      })}
+                    </dd>
                   </div>
                 </dl>
               </div>
@@ -113,9 +317,17 @@ export function ProjectDetailPage() {
                 <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">
                   Description
                 </h3>
-                <p className="text-slate-600 dark:text-slate-300">
-                  No description provided.
-                </p>
+                {project.description ? (
+                  <div className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-4">
+                    <p className="text-slate-600 dark:text-slate-300 whitespace-pre-wrap">
+                      {project.description}
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-slate-400 italic">
+                    No description provided.
+                  </p>
+                )}
               </div>
             </div>
           </div>
@@ -124,18 +336,106 @@ export function ProjectDetailPage() {
           <div>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
-                Tasks
+                Tasks ({tasks.length})
               </h3>
-              <button className="btn-primary text-sm">
+              <button
+                onClick={() => setIsAddTaskModalOpen(true)}
+                className="btn-primary text-sm"
+              >
                 <Plus className="h-4 w-4 mr-1" />
                 Add Task
               </button>
             </div>
-            <div className="text-center py-8 text-slate-500 dark:text-slate-400">
-              <CheckSquare className="h-8 w-8 mx-auto mb-2 opacity-50" />
-              <p>No tasks yet</p>
-              <p className="text-sm">Create tasks to track project progress</p>
-            </div>
+            {tasksLoading ? (
+              <div className="text-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+                <p className="mt-4 text-slate-500 dark:text-slate-400">Loading tasks...</p>
+              </div>
+            ) : tasks.length === 0 ? (
+              <div className="text-center py-8 text-slate-500 dark:text-slate-400">
+                <CheckSquare className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                <p>No tasks yet</p>
+                <p className="text-sm">Create tasks to track project progress</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {tasks.map((task) => (
+                  <div
+                    key={task.id}
+                    className="p-4 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-start gap-3">
+                        <div className={`mt-1 w-4 h-4 rounded border-2 flex items-center justify-center ${
+                          task.status === 'done'
+                            ? 'bg-green-500 border-green-500'
+                            : 'border-slate-300 dark:border-slate-600'
+                        }`}>
+                          {task.status === 'done' && (
+                            <CheckSquare className="h-3 w-3 text-white" />
+                          )}
+                        </div>
+                        <div>
+                          <h4 className={`font-medium text-slate-900 dark:text-white ${
+                            task.status === 'done' ? 'line-through text-slate-500' : ''
+                          }`}>
+                            {task.title}
+                          </h4>
+                          {task.description && (
+                            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                              {task.description}
+                            </p>
+                          )}
+                          <div className="flex items-center gap-3 mt-2">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium capitalize ${
+                              task.status === 'done' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' :
+                              task.status === 'in_progress' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300' :
+                              'bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-300'
+                            }`}>
+                              {task.status.replace('_', ' ')}
+                            </span>
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium capitalize ${
+                              task.priority === 'high' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300' :
+                              task.priority === 'medium' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300' :
+                              'bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-300'
+                            }`}>
+                              {task.priority === 'high' && <AlertCircle className="h-3 w-3 mr-1" />}
+                              {task.priority}
+                            </span>
+                            {task.due_date && (
+                              <span className="text-xs text-slate-500 dark:text-slate-400 flex items-center">
+                                <Calendar className="h-3 w-3 mr-1" />
+                                {new Date(task.due_date).toLocaleDateString()}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => {
+                            setSelectedTask(task)
+                            setIsEditTaskModalOpen(true)
+                          }}
+                          className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            setSelectedTask(task)
+                            setIsDeleteTaskDialogOpen(true)
+                          }}
+                          className="p-2 text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
         {activeTab === 'Files' && (
@@ -145,6 +445,60 @@ export function ProjectDetailPage() {
           </div>
         )}
       </div>
+
+      {/* Edit Project Modal */}
+      <EditProjectModal
+        isOpen={isEditModalOpen}
+        onClose={() => setIsEditModalOpen(false)}
+        project={project}
+        onProjectUpdated={fetchProject}
+      />
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={isDeleteDialogOpen}
+        onClose={() => setIsDeleteDialogOpen(false)}
+        onConfirm={handleDelete}
+        title="Delete Project"
+        message={`Are you sure you want to delete "${project.name}"? This action cannot be undone and will also remove all associated tasks.`}
+        confirmText="Delete"
+        variant="danger"
+        loading={deleting}
+      />
+
+      {/* Add Task Modal */}
+      <AddTaskModal
+        isOpen={isAddTaskModalOpen}
+        onClose={() => setIsAddTaskModalOpen(false)}
+        project={project}
+        onTaskAdded={fetchTasks}
+      />
+
+      {/* Edit Task Modal */}
+      <EditTaskModal
+        isOpen={isEditTaskModalOpen}
+        onClose={() => {
+          setIsEditTaskModalOpen(false)
+          setSelectedTask(null)
+        }}
+        task={selectedTask}
+        onTaskUpdated={fetchTasks}
+      />
+
+      {/* Delete Task Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={isDeleteTaskDialogOpen}
+        onClose={() => {
+          setIsDeleteTaskDialogOpen(false)
+          setSelectedTask(null)
+        }}
+        onConfirm={handleDeleteTask}
+        title="Delete Task"
+        message={`Are you sure you want to delete "${selectedTask?.title}"? This action cannot be undone.`}
+        confirmText="Delete"
+        variant="danger"
+        loading={deletingTask}
+      />
     </div>
   )
 }
