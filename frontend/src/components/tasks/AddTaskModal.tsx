@@ -2,25 +2,21 @@ import { useState } from 'react'
 import { Modal } from '../ui/Modal'
 import { LoadingSpinner } from '../ui/LoadingSpinner'
 import { supabase } from '../../lib/supabase'
-import { useAuth } from '../../context/AuthContext'
-import type { ProjectStatus, Client } from '../../types/database'
+import type { TaskStatus, TaskPriority, Project } from '../../types/database'
 
-interface AddProjectModalProps {
+interface AddTaskModalProps {
   isOpen: boolean
   onClose: () => void
-  client?: Client | null
-  onProjectAdded?: () => void
+  project: Project | null
+  onTaskAdded?: () => void
 }
 
-export function AddProjectModal({ isOpen, onClose, client, onProjectAdded }: AddProjectModalProps) {
-  const { user } = useAuth()
-
-  const [name, setName] = useState('')
+export function AddTaskModal({ isOpen, onClose, project, onTaskAdded }: AddTaskModalProps) {
+  const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
-  const [status, setStatus] = useState<ProjectStatus>('planning')
-  const [startDate, setStartDate] = useState('')
+  const [status, setStatus] = useState<TaskStatus>('todo')
+  const [priority, setPriority] = useState<TaskPriority>('medium')
   const [dueDate, setDueDate] = useState('')
-  const [budget, setBudget] = useState('')
 
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -31,38 +27,36 @@ export function AddProjectModal({ isOpen, onClose, client, onProjectAdded }: Add
     setError('')
     setSuccess(false)
 
-    if (!name.trim()) {
-      setError('Project name is required')
+    if (!title.trim()) {
+      setError('Task title is required')
       return
     }
 
-    if (!client || !user) {
-      setError('No client selected')
+    if (!project) {
+      setError('No project selected')
       return
     }
 
     setLoading(true)
 
     const { error: insertError } = await supabase
-      .from('projects')
+      .from('tasks')
       .insert({
-        client_id: client.id,
-        name: name.trim(),
+        project_id: project.id,
+        title: title.trim(),
         description: description.trim() || null,
         status,
-        start_date: startDate || null,
+        priority,
         due_date: dueDate || null,
-        budget: budget ? parseFloat(budget) : null,
-        created_by: user.id,
       })
 
     if (insertError) {
-      setError(insertError.message || 'Failed to create project')
+      setError(insertError.message || 'Failed to create task')
       setLoading(false)
     } else {
       setSuccess(true)
       setLoading(false)
-      onProjectAdded?.()
+      onTaskAdded?.()
       // Auto-close after success
       setTimeout(() => {
         handleClose()
@@ -71,19 +65,18 @@ export function AddProjectModal({ isOpen, onClose, client, onProjectAdded }: Add
   }
 
   function handleClose() {
-    setName('')
+    setTitle('')
     setDescription('')
-    setStatus('planning')
-    setStartDate('')
+    setStatus('todo')
+    setPriority('medium')
     setDueDate('')
-    setBudget('')
     setError('')
     setSuccess(false)
     onClose()
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={handleClose} title="Add New Project" size="lg">
+    <Modal isOpen={isOpen} onClose={handleClose} title="Add New Task" size="lg">
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && (
           <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-500 dark:text-red-400 text-sm">
@@ -93,29 +86,29 @@ export function AddProjectModal({ isOpen, onClose, client, onProjectAdded }: Add
 
         {success && (
           <div className="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg text-green-600 dark:text-green-400 text-sm">
-            Project created successfully!
+            Task created successfully!
           </div>
         )}
 
-        {client && (
+        {project && (
           <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
-            <p className="text-sm text-slate-500 dark:text-slate-400">Creating project for</p>
-            <p className="font-medium text-slate-900 dark:text-white">{client.name}</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">Adding task to</p>
+            <p className="font-medium text-slate-900 dark:text-white">{project.name}</p>
           </div>
         )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="md:col-span-2">
-            <label htmlFor="projectName" className="label">
-              Project Name *
+            <label htmlFor="taskTitle" className="label">
+              Task Title *
             </label>
             <input
-              id="projectName"
+              id="taskTitle"
               type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
               className="input"
-              placeholder="Website Redesign"
+              placeholder="Complete wireframes"
               autoFocus
               disabled={success}
             />
@@ -130,7 +123,7 @@ export function AddProjectModal({ isOpen, onClose, client, onProjectAdded }: Add
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               className="input min-h-[80px]"
-              placeholder="Project description..."
+              placeholder="Task description..."
               disabled={success}
             />
           </div>
@@ -142,47 +135,31 @@ export function AddProjectModal({ isOpen, onClose, client, onProjectAdded }: Add
             <select
               id="status"
               value={status}
-              onChange={(e) => setStatus(e.target.value as ProjectStatus)}
+              onChange={(e) => setStatus(e.target.value as TaskStatus)}
               className="input"
               disabled={success}
             >
-              <option value="planning">Planning</option>
+              <option value="todo">To Do</option>
               <option value="in_progress">In Progress</option>
-              <option value="review">Review</option>
-              <option value="completed">Completed</option>
-              <option value="cancelled">Cancelled</option>
+              <option value="done">Done</option>
             </select>
           </div>
 
           <div>
-            <label htmlFor="budget" className="label">
-              Budget ($)
+            <label htmlFor="priority" className="label">
+              Priority
             </label>
-            <input
-              id="budget"
-              type="number"
-              value={budget}
-              onChange={(e) => setBudget(e.target.value)}
-              className="input"
-              placeholder="10000"
-              min="0"
-              step="0.01"
-              disabled={success}
-            />
-          </div>
-
-          <div>
-            <label htmlFor="startDate" className="label">
-              Start Date
-            </label>
-            <input
-              id="startDate"
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
+            <select
+              id="priority"
+              value={priority}
+              onChange={(e) => setPriority(e.target.value as TaskPriority)}
               className="input"
               disabled={success}
-            />
+            >
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+            </select>
           </div>
 
           <div>
@@ -214,7 +191,7 @@ export function AddProjectModal({ isOpen, onClose, client, onProjectAdded }: Add
             className="btn-primary flex items-center"
             disabled={loading || success}
           >
-            {loading ? <LoadingSpinner size="sm" /> : 'Create Project'}
+            {loading ? <LoadingSpinner size="sm" /> : 'Create Task'}
           </button>
         </div>
       </form>

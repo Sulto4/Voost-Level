@@ -1,0 +1,397 @@
+<project_specification>
+  <project_name>Voost Level</project_name>
+
+  <overview>
+    Voost Level este un CRM AI-friendly similar cu Go High Level, dar optimizat pentru agenții
+    care livrează servicii către business-uri (marketing, web development, app development).
+
+    Aplicația permite managementul complet al clienților cu sub-accounts per client, tracking
+    pipeline, surse lead-uri, și este proiectată să fie folosită atât de oameni cât și de
+    agenți AI într-o simbioză productivă.
+
+    Target audience: Agenții care lucrează cu business-uri și au nevoie de un CRM eficient
+    pentru a gestiona relațiile cu clienții și proiectele în curs.
+  </overview>
+
+  <technology_stack>
+    <frontend>
+      <framework>React with Vite</framework>
+      <styling>Tailwind CSS</styling>
+      <state_management>React hooks and context</state_management>
+      <routing>React Router for navigation</routing>
+      <port>3000</port>
+    </frontend>
+    <backend>
+      <runtime>Supabase (serverless)</runtime>
+      <database>PostgreSQL via Supabase</database>
+      <auth>Supabase Auth (email + Google)</auth>
+      <functions>Supabase Edge Functions</functions>
+      <realtime>Supabase Realtime for live updates</realtime>
+    </backend>
+    <communication>
+      <api>Supabase client SDK + REST API</api>
+    </communication>
+  </technology_stack>
+
+  <prerequisites>
+    <environment_setup>
+      - Node.js 18+ installed
+      - npm or pnpm package manager
+      - Supabase project: dsztivupnrzaxvrijxpu
+      - Supabase URL: https://dsztivupnrzaxvrijxpu.supabase.co
+    </environment_setup>
+  </prerequisites>
+
+  <core_features>
+    <authentication>
+      - User registration with email/password
+      - Google OAuth login
+      - User login with session management
+      - User logout
+      - Password reset flow
+      - Profile management with avatar
+      - Multiple roles: Owner, Admin, Member, Viewer
+      - Role-based permissions throughout the app
+    </authentication>
+
+    <workspace_management>
+      - Create workspace (agenție)
+      - Invite team members to workspace via email
+      - Assign roles to team members
+      - Workspace settings and branding
+      - Multiple workspaces support per user
+    </workspace_management>
+
+    <client_management>
+      - Sub-account per client (isolated context)
+      - Client profile with company info, contacts
+      - Client status tracking (Lead, Active, Inactive, Churned)
+      - Client source tracking (de unde a venit lead-ul)
+      - Client timeline with all interactions
+      - Notes and comments per client
+      - File attachments per client
+      - Custom fields per client
+    </client_management>
+
+    <project_tracking>
+      - Multiple projects per client
+      - Project status (Planning, In Progress, Review, Completed)
+      - Project milestones and deadlines
+      - Task management within projects
+      - Time tracking per project (optional)
+      - Project budget tracking (optional)
+    </project_tracking>
+
+    <pipeline_crm>
+      - Visual pipeline (Kanban board)
+      - Customizable pipeline stages
+      - Drag-and-drop between stages
+      - Pipeline value tracking
+      - Win/loss tracking
+      - Lead scoring (optional)
+    </pipeline_crm>
+
+    <ai_integration>
+      - API endpoints optimized for AI agent consumption
+      - Structured context export per client
+      - Efficient data retrieval for context windows
+      - Webhook support for AI agent triggers
+      - API documentation for agent integration
+    </ai_integration>
+
+    <search_and_filter>
+      - Global search across clients, projects, notes
+      - Full-text search in all content
+      - Filter by status, source, date range, tags
+      - Sort by name, date, value, status
+      - Saved search/filter presets
+    </search_and_filter>
+
+    <user_interface>
+      - Responsive layout (mobile, tablet, desktop)
+      - Dark/light theme toggle
+      - Loading states and skeletons
+      - Error handling with user feedback
+      - Toast notifications for actions
+      - Keyboard shortcuts for power users
+      - Dashboard with key metrics
+    </user_interface>
+
+    <data_management>
+      - Data validation on forms
+      - Import clients from CSV
+      - Export data to CSV/JSON
+      - Audit log for important changes
+      - Soft delete with restore option
+    </data_management>
+  </core_features>
+
+  <database_schema>
+    <tables>
+      <profiles>
+        - id (UUID, PRIMARY KEY, references auth.users)
+        - email (TEXT, NOT NULL)
+        - full_name (TEXT)
+        - avatar_url (TEXT)
+        - preferences (JSONB)
+        - created_at, updated_at (TIMESTAMPTZ)
+      </profiles>
+
+      <workspaces>
+        - id (UUID, PRIMARY KEY)
+        - name (TEXT, NOT NULL)
+        - slug (TEXT, UNIQUE, NOT NULL)
+        - logo_url (TEXT)
+        - settings (JSONB)
+        - created_by (UUID, FOREIGN KEY -> profiles.id)
+        - created_at, updated_at (TIMESTAMPTZ)
+      </workspaces>
+
+      <workspace_members>
+        - id (UUID, PRIMARY KEY)
+        - workspace_id (UUID, FOREIGN KEY -> workspaces.id)
+        - user_id (UUID, FOREIGN KEY -> profiles.id)
+        - role (ENUM: owner, admin, member, viewer)
+        - invited_at, joined_at (TIMESTAMPTZ)
+        - UNIQUE(workspace_id, user_id)
+      </workspace_members>
+
+      <clients>
+        - id (UUID, PRIMARY KEY)
+        - workspace_id (UUID, FOREIGN KEY -> workspaces.id)
+        - name (TEXT, NOT NULL)
+        - company (TEXT)
+        - email (TEXT)
+        - phone (TEXT)
+        - website (TEXT)
+        - status (ENUM: lead, active, inactive, churned)
+        - source (TEXT) -- de unde a venit lead-ul
+        - pipeline_stage_id (UUID, FOREIGN KEY -> pipeline_stages.id)
+        - value (NUMERIC) -- valoare deal
+        - custom_fields (JSONB)
+        - notes (TEXT)
+        - created_by (UUID, FOREIGN KEY -> profiles.id)
+        - created_at, updated_at (TIMESTAMPTZ)
+      </clients>
+
+      <client_contacts>
+        - id (UUID, PRIMARY KEY)
+        - client_id (UUID, FOREIGN KEY -> clients.id)
+        - name (TEXT, NOT NULL)
+        - email (TEXT)
+        - phone (TEXT)
+        - role (TEXT) -- poziție în companie
+        - is_primary (BOOLEAN)
+        - created_at, updated_at (TIMESTAMPTZ)
+      </client_contacts>
+
+      <projects>
+        - id (UUID, PRIMARY KEY)
+        - client_id (UUID, FOREIGN KEY -> clients.id)
+        - name (TEXT, NOT NULL)
+        - description (TEXT)
+        - status (ENUM: planning, in_progress, review, completed, cancelled)
+        - start_date, due_date (DATE)
+        - budget (NUMERIC)
+        - created_by (UUID, FOREIGN KEY -> profiles.id)
+        - created_at, updated_at (TIMESTAMPTZ)
+      </projects>
+
+      <tasks>
+        - id (UUID, PRIMARY KEY)
+        - project_id (UUID, FOREIGN KEY -> projects.id)
+        - title (TEXT, NOT NULL)
+        - description (TEXT)
+        - status (ENUM: todo, in_progress, done)
+        - priority (ENUM: low, medium, high)
+        - assigned_to (UUID, FOREIGN KEY -> profiles.id)
+        - due_date (DATE)
+        - created_at, updated_at (TIMESTAMPTZ)
+      </tasks>
+
+      <pipeline_stages>
+        - id (UUID, PRIMARY KEY)
+        - workspace_id (UUID, FOREIGN KEY -> workspaces.id)
+        - name (TEXT, NOT NULL)
+        - color (TEXT)
+        - position (INTEGER)
+        - created_at, updated_at (TIMESTAMPTZ)
+      </pipeline_stages>
+
+      <activities>
+        - id (UUID, PRIMARY KEY)
+        - client_id (UUID, FOREIGN KEY -> clients.id)
+        - user_id (UUID, FOREIGN KEY -> profiles.id)
+        - type (ENUM: note, call, email, meeting, task, status_change)
+        - content (TEXT)
+        - metadata (JSONB)
+        - created_at (TIMESTAMPTZ)
+      </activities>
+
+      <files>
+        - id (UUID, PRIMARY KEY)
+        - client_id (UUID, FOREIGN KEY -> clients.id)
+        - project_id (UUID, FOREIGN KEY -> projects.id, NULLABLE)
+        - name (TEXT, NOT NULL)
+        - storage_path (TEXT, NOT NULL)
+        - mime_type (TEXT)
+        - size (INTEGER)
+        - uploaded_by (UUID, FOREIGN KEY -> profiles.id)
+        - created_at (TIMESTAMPTZ)
+      </files>
+    </tables>
+  </database_schema>
+
+  <api_endpoints_summary>
+    <authentication>
+      - Supabase Auth handles all auth endpoints
+      - POST /auth/v1/signup
+      - POST /auth/v1/token (login)
+      - POST /auth/v1/logout
+      - GET /auth/v1/user
+    </authentication>
+
+    <workspaces>
+      - GET /rest/v1/workspaces (list user's workspaces)
+      - POST /rest/v1/workspaces (create)
+      - GET /rest/v1/workspaces/:id
+      - PATCH /rest/v1/workspaces/:id
+      - DELETE /rest/v1/workspaces/:id
+    </workspaces>
+
+    <clients>
+      - GET /rest/v1/clients (list with filters)
+      - POST /rest/v1/clients
+      - GET /rest/v1/clients/:id
+      - PATCH /rest/v1/clients/:id
+      - DELETE /rest/v1/clients/:id
+      - GET /rest/v1/clients/:id/context (AI-optimized context export)
+    </clients>
+
+    <projects>
+      - GET /rest/v1/projects (list, filter by client)
+      - POST /rest/v1/projects
+      - GET /rest/v1/projects/:id
+      - PATCH /rest/v1/projects/:id
+      - DELETE /rest/v1/projects/:id
+    </projects>
+  </api_endpoints_summary>
+
+  <ui_layout>
+    <main_structure>
+      - Sidebar with workspace selector and navigation
+      - Header with search, notifications, user menu
+      - Main content area
+      - Responsive: sidebar collapses on mobile
+    </main_structure>
+
+    <sidebar>
+      - Workspace selector (dropdown) at top
+      - Navigation: Dashboard, Clients, Pipeline, Projects, Team, Settings
+      - Quick add button (+)
+      - User profile at bottom
+    </sidebar>
+
+    <main_pages>
+      - Dashboard: Metrics, recent activity, pipeline overview
+      - Clients: List view with filters, search
+      - Client Detail: Tabs for Overview, Projects, Activity, Files
+      - Pipeline: Kanban board view
+      - Projects: List or board view
+      - Team: Members list, invite, roles
+      - Settings: Workspace, profile, integrations
+    </main_pages>
+
+    <modals_overlays>
+      - Add/Edit Client modal
+      - Add/Edit Project modal
+      - Invite team member modal
+      - Quick actions command palette (Cmd+K)
+    </modals_overlays>
+  </ui_layout>
+
+  <design_system>
+    <color_palette>
+      - Primary: #6366F1 (indigo)
+      - Secondary: #10B981 (emerald)
+      - Accent: #F59E0B (amber)
+      - Background: #FFFFFF (light), #0F172A (dark)
+      - Surface: #F8FAFC (light), #1E293B (dark)
+      - Text: #1E293B (light), #F1F5F9 (dark)
+      - Border: #E2E8F0 (light), #334155 (dark)
+      - Error: #EF4444
+      - Success: #10B981
+      - Warning: #F59E0B
+    </color_palette>
+
+    <typography>
+      - Font family: Inter, system-ui, -apple-system, sans-serif
+      - Headings: font-semibold
+      - Body: font-normal, leading-relaxed
+      - Code: JetBrains Mono, Consolas, monospace
+    </typography>
+  </design_system>
+
+  <key_interactions>
+    <onboarding_flow>
+      1. User signs up (email or Google)
+      2. Creates first workspace (agency name)
+      3. Sees empty dashboard with prompts to add first client
+      4. Adds first client
+      5. Optionally invites team members
+    </onboarding_flow>
+
+    <add_client_flow>
+      1. Click "Add Client" button
+      2. Modal opens with form
+      3. Fill name, company, contact info
+      4. Select pipeline stage
+      5. Save -> client appears in list
+    </add_client_flow>
+
+    <pipeline_flow>
+      1. View pipeline (Kanban)
+      2. See clients as cards in stages
+      3. Drag card to new stage
+      4. Stage updates, activity logged
+    </pipeline_flow>
+
+    <ai_context_flow>
+      1. AI agent calls /clients/:id/context
+      2. Gets structured JSON with client info, projects, recent activity
+      3. Uses context in AI processing
+      4. Can update client via API
+    </ai_context_flow>
+  </key_interactions>
+
+  <success_criteria>
+    <functionality>
+      - CRUD for workspaces, clients, projects, tasks
+      - Authentication with email and Google
+      - Role-based access control working
+      - Pipeline drag-and-drop functional
+      - Search and filters working
+      - AI-friendly API endpoints available
+    </functionality>
+
+    <user_experience>
+      - Responsive on all device sizes
+      - Fast load times (< 2s)
+      - Intuitive navigation
+      - Clear feedback for all actions
+    </user_experience>
+
+    <ai_integration>
+      - API endpoints return structured, context-optimized data
+      - Documentation available for AI agent integration
+      - Efficient data retrieval for context windows
+    </ai_integration>
+
+    <mvp_definition>
+      Aplicația e "done" când:
+      - Un user poate să-și gestioneze clienții și să vadă contextul fiecăruia
+      - Un agent AI poate să acceseze API-ul și să obțină context eficient
+      - Colaborarea user-AI funcționează în practică
+    </mvp_definition>
+  </success_criteria>
+</project_specification>

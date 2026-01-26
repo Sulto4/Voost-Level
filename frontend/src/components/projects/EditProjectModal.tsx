@@ -1,20 +1,17 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Modal } from '../ui/Modal'
 import { LoadingSpinner } from '../ui/LoadingSpinner'
 import { supabase } from '../../lib/supabase'
-import { useAuth } from '../../context/AuthContext'
-import type { ProjectStatus, Client } from '../../types/database'
+import type { Project, ProjectStatus } from '../../types/database'
 
-interface AddProjectModalProps {
+interface EditProjectModalProps {
   isOpen: boolean
   onClose: () => void
-  client?: Client | null
-  onProjectAdded?: () => void
+  project: Project | null
+  onProjectUpdated?: () => void
 }
 
-export function AddProjectModal({ isOpen, onClose, client, onProjectAdded }: AddProjectModalProps) {
-  const { user } = useAuth()
-
+export function EditProjectModal({ isOpen, onClose, project, onProjectUpdated }: EditProjectModalProps) {
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [status, setStatus] = useState<ProjectStatus>('planning')
@@ -26,6 +23,18 @@ export function AddProjectModal({ isOpen, onClose, client, onProjectAdded }: Add
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
 
+  // Populate form when project changes
+  useEffect(() => {
+    if (project) {
+      setName(project.name || '')
+      setDescription(project.description || '')
+      setStatus(project.status || 'planning')
+      setStartDate(project.start_date || '')
+      setDueDate(project.due_date || '')
+      setBudget(project.budget?.toString() || '')
+    }
+  }, [project])
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
@@ -36,33 +45,33 @@ export function AddProjectModal({ isOpen, onClose, client, onProjectAdded }: Add
       return
     }
 
-    if (!client || !user) {
-      setError('No client selected')
+    if (!project) {
+      setError('No project selected')
       return
     }
 
     setLoading(true)
 
-    const { error: insertError } = await supabase
+    const { error: updateError } = await supabase
       .from('projects')
-      .insert({
-        client_id: client.id,
+      .update({
         name: name.trim(),
         description: description.trim() || null,
         status,
         start_date: startDate || null,
         due_date: dueDate || null,
         budget: budget ? parseFloat(budget) : null,
-        created_by: user.id,
+        updated_at: new Date().toISOString(),
       })
+      .eq('id', project.id)
 
-    if (insertError) {
-      setError(insertError.message || 'Failed to create project')
+    if (updateError) {
+      setError(updateError.message || 'Failed to update project')
       setLoading(false)
     } else {
       setSuccess(true)
       setLoading(false)
-      onProjectAdded?.()
+      onProjectUpdated?.()
       // Auto-close after success
       setTimeout(() => {
         handleClose()
@@ -71,19 +80,13 @@ export function AddProjectModal({ isOpen, onClose, client, onProjectAdded }: Add
   }
 
   function handleClose() {
-    setName('')
-    setDescription('')
-    setStatus('planning')
-    setStartDate('')
-    setDueDate('')
-    setBudget('')
     setError('')
     setSuccess(false)
     onClose()
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={handleClose} title="Add New Project" size="lg">
+    <Modal isOpen={isOpen} onClose={handleClose} title="Edit Project" size="lg">
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && (
           <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-500 dark:text-red-400 text-sm">
@@ -93,14 +96,7 @@ export function AddProjectModal({ isOpen, onClose, client, onProjectAdded }: Add
 
         {success && (
           <div className="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg text-green-600 dark:text-green-400 text-sm">
-            Project created successfully!
-          </div>
-        )}
-
-        {client && (
-          <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
-            <p className="text-sm text-slate-500 dark:text-slate-400">Creating project for</p>
-            <p className="font-medium text-slate-900 dark:text-white">{client.name}</p>
+            Project updated successfully!
           </div>
         )}
 
@@ -214,7 +210,7 @@ export function AddProjectModal({ isOpen, onClose, client, onProjectAdded }: Add
             className="btn-primary flex items-center"
             disabled={loading || success}
           >
-            {loading ? <LoadingSpinner size="sm" /> : 'Create Project'}
+            {loading ? <LoadingSpinner size="sm" /> : 'Save Changes'}
           </button>
         </div>
       </form>
