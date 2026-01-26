@@ -17,6 +17,7 @@ export function ProjectsPage() {
   const [loading, setLoading] = useState(true)
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null)
+  const [selectedStatus, setSelectedStatus] = useState<string | null>(null)
   const [isFilterDropdownOpen, setIsFilterDropdownOpen] = useState(false)
 
   useEffect(() => {
@@ -59,6 +60,18 @@ export function ProjectsPage() {
     return acc
   }, [] as { id: string; name: string; company: string | null }[]).sort((a, b) => a.name.localeCompare(b.name))
 
+  // Status options for the filter
+  const statusOptions = [
+    { value: 'planning', label: 'Planning' },
+    { value: 'in_progress', label: 'In Progress' },
+    { value: 'review', label: 'Review' },
+    { value: 'completed', label: 'Completed' },
+    { value: 'cancelled', label: 'Cancelled' },
+  ]
+
+  // Count active filters
+  const activeFilterCount = (selectedClientId ? 1 : 0) + (selectedStatus ? 1 : 0)
+
   const filteredProjects = projects.filter((project) => {
     const query = searchQuery.toLowerCase()
     const matchesSearch = (
@@ -68,7 +81,8 @@ export function ProjectsPage() {
       project.clients?.company?.toLowerCase().includes(query)
     )
     const matchesClientFilter = !selectedClientId || project.clients?.id === selectedClientId
-    return matchesSearch && matchesClientFilter
+    const matchesStatusFilter = !selectedStatus || project.status === selectedStatus
+    return matchesSearch && matchesClientFilter && matchesStatusFilter
   })
 
   const statusColors: Record<string, string> = {
@@ -120,14 +134,14 @@ export function ProjectsPage() {
         </div>
         <div className="relative">
           <button
-            className={`btn-outline min-h-[44px] ${selectedClientId ? 'ring-2 ring-primary-500' : ''}`}
+            className={`btn-outline min-h-[44px] ${activeFilterCount > 0 ? 'ring-2 ring-primary-500' : ''}`}
             onClick={() => setIsFilterDropdownOpen(!isFilterDropdownOpen)}
           >
             <Filter className="h-5 w-5 mr-2" />
-            {selectedClientId ? 'Client Filter' : 'Filters'}
-            {selectedClientId && (
+            Filters
+            {activeFilterCount > 0 && (
               <span className="ml-2 px-1.5 py-0.5 text-xs bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 rounded">
-                1
+                {activeFilterCount}
               </span>
             )}
           </button>
@@ -140,6 +154,41 @@ export function ProjectsPage() {
                 onClick={() => setIsFilterDropdownOpen(false)}
               />
               <div className="absolute right-0 top-full mt-2 w-72 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg z-20">
+                {/* Status Filter Section */}
+                <div className="p-4 border-b border-slate-200 dark:border-slate-700">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-sm font-medium text-slate-900 dark:text-white">
+                      Filter by Status
+                    </h3>
+                    {selectedStatus && (
+                      <button
+                        onClick={() => setSelectedStatus(null)}
+                        className="text-xs text-primary-600 hover:text-primary-700 dark:text-primary-400"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {statusOptions.map((status) => (
+                      <button
+                        key={status.value}
+                        onClick={() => {
+                          setSelectedStatus(status.value === selectedStatus ? null : status.value)
+                        }}
+                        className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                          selectedStatus === status.value
+                            ? statusColors[status.value]
+                            : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
+                        }`}
+                      >
+                        {status.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Client Filter Section */}
                 <div className="p-4 border-b border-slate-200 dark:border-slate-700">
                   <div className="flex items-center justify-between">
                     <h3 className="text-sm font-medium text-slate-900 dark:text-white">
@@ -147,18 +196,15 @@ export function ProjectsPage() {
                     </h3>
                     {selectedClientId && (
                       <button
-                        onClick={() => {
-                          setSelectedClientId(null)
-                          setIsFilterDropdownOpen(false)
-                        }}
+                        onClick={() => setSelectedClientId(null)}
                         className="text-xs text-primary-600 hover:text-primary-700 dark:text-primary-400"
                       >
-                        Clear filter
+                        Clear
                       </button>
                     )}
                   </div>
                 </div>
-                <div className="max-h-64 overflow-y-auto p-2">
+                <div className="max-h-48 overflow-y-auto p-2">
                   {uniqueClients.length === 0 ? (
                     <p className="text-sm text-slate-500 dark:text-slate-400 p-2">
                       No clients with projects
@@ -169,7 +215,6 @@ export function ProjectsPage() {
                         key={client.id}
                         onClick={() => {
                           setSelectedClientId(client.id === selectedClientId ? null : client.id)
-                          setIsFilterDropdownOpen(false)
                         }}
                         className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
                           selectedClientId === client.id
@@ -187,6 +232,22 @@ export function ProjectsPage() {
                     ))
                   )}
                 </div>
+
+                {/* Clear All Button */}
+                {activeFilterCount > 0 && (
+                  <div className="p-2 border-t border-slate-200 dark:border-slate-700">
+                    <button
+                      onClick={() => {
+                        setSelectedClientId(null)
+                        setSelectedStatus(null)
+                        setIsFilterDropdownOpen(false)
+                      }}
+                      className="w-full px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                    >
+                      Clear all filters
+                    </button>
+                  </div>
+                )}
               </div>
             </>
           )}
@@ -194,20 +255,34 @@ export function ProjectsPage() {
       </div>
 
       {/* Active Filters Display */}
-      {selectedClientId && (
-        <div className="flex items-center gap-2">
+      {activeFilterCount > 0 && (
+        <div className="flex items-center gap-2 flex-wrap">
           <span className="text-sm text-slate-500 dark:text-slate-400">Filters:</span>
-          <span className="inline-flex items-center gap-1 px-2 py-1 bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300 text-sm rounded-full">
-            <Building2 className="h-3 w-3" />
-            {uniqueClients.find(c => c.id === selectedClientId)?.name}
-            <button
-              onClick={() => setSelectedClientId(null)}
-              className="ml-1 hover:text-primary-900 dark:hover:text-primary-100"
-              aria-label="Remove filter"
-            >
-              <X className="h-3 w-3" />
-            </button>
-          </span>
+          {selectedStatus && (
+            <span className={`inline-flex items-center gap-1 px-2 py-1 text-sm rounded-full ${statusColors[selectedStatus]}`}>
+              {statusOptions.find(s => s.value === selectedStatus)?.label}
+              <button
+                onClick={() => setSelectedStatus(null)}
+                className="ml-1 hover:opacity-70"
+                aria-label="Remove status filter"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          )}
+          {selectedClientId && (
+            <span className="inline-flex items-center gap-1 px-2 py-1 bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300 text-sm rounded-full">
+              <Building2 className="h-3 w-3" />
+              {uniqueClients.find(c => c.id === selectedClientId)?.name}
+              <button
+                onClick={() => setSelectedClientId(null)}
+                className="ml-1 hover:text-primary-900 dark:hover:text-primary-100"
+                aria-label="Remove client filter"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          )}
         </div>
       )}
 
