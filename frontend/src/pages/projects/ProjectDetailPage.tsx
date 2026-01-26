@@ -1,6 +1,6 @@
 import { useState, useEffect, DragEvent } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Edit, Trash2, Plus, CheckSquare, Calendar, DollarSign, Building2, AlertCircle, Flag, CheckCircle, User, GripVertical, ChevronDown, ChevronRight } from 'lucide-react'
+import { ArrowLeft, Edit, Trash2, Plus, CheckSquare, Calendar, DollarSign, Building2, AlertCircle, Flag, CheckCircle, User, GripVertical, ChevronDown, ChevronRight, Filter, X } from 'lucide-react'
 import { clsx } from 'clsx'
 import { supabase } from '../../lib/supabase'
 import { EditProjectModal } from '../../components/projects/EditProjectModal'
@@ -48,6 +48,8 @@ export function ProjectDetailPage() {
   const [addingSubtaskToTaskId, setAddingSubtaskToTaskId] = useState<string | null>(null)
   const [subtaskTitle, setSubtaskTitle] = useState('')
   const [addingSubtask, setAddingSubtask] = useState(false)
+  const [taskAssigneeFilter, setTaskAssigneeFilter] = useState<string | null>(null) // null = all, 'unassigned' = unassigned, or user ID
+  const [isTaskFilterDropdownOpen, setIsTaskFilterDropdownOpen] = useState(false)
 
   useEffect(() => {
     if (id) {
@@ -361,6 +363,32 @@ export function ProjectDetailPage() {
     return { completed, total, percentage }
   }
 
+  // Get unique assignees from tasks for the filter dropdown
+  const uniqueAssignees = tasks.reduce((acc, task) => {
+    if (task.assignee && !acc.find(a => a.id === task.assignee?.id)) {
+      acc.push({ id: task.assignee.id, name: task.assignee.full_name || task.assignee.email })
+    }
+    // Also check subtasks
+    task.subtasks?.forEach(subtask => {
+      if (subtask.assignee && !acc.find(a => a.id === subtask.assignee?.id)) {
+        acc.push({ id: subtask.assignee.id, name: subtask.assignee.full_name || subtask.assignee.email })
+      }
+    })
+    return acc
+  }, [] as { id: string; name: string }[]).sort((a, b) => a.name.localeCompare(b.name))
+
+  // Check if there are any unassigned tasks
+  const hasUnassignedTasks = tasks.some(task =>
+    !task.assigned_to || task.subtasks?.some(s => !s.assigned_to)
+  )
+
+  // Filter tasks by assignee
+  const filteredTasks = tasks.filter(task => {
+    if (!taskAssigneeFilter) return true // No filter = show all
+    if (taskAssigneeFilter === 'unassigned') return !task.assigned_to
+    return task.assigned_to === taskAssigneeFilter
+  })
+
   const statusColors: Record<string, string> = {
     planning: 'bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-300',
     in_progress: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
@@ -668,16 +696,116 @@ export function ProjectDetailPage() {
           <div>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
-                Tasks ({tasks.length})
+                Tasks ({filteredTasks.length}{taskAssigneeFilter ? ` of ${tasks.length}` : ''})
               </h3>
-              <button
-                onClick={() => setIsAddTaskModalOpen(true)}
-                className="btn-primary text-sm"
-              >
-                <Plus className="h-4 w-4 mr-1" />
-                Add Task
-              </button>
+              <div className="flex items-center gap-2">
+                {/* Assignee Filter */}
+                <div className="relative">
+                  <button
+                    onClick={() => setIsTaskFilterDropdownOpen(!isTaskFilterDropdownOpen)}
+                    className={`btn-outline text-sm ${taskAssigneeFilter ? 'ring-2 ring-primary-500' : ''}`}
+                  >
+                    <Filter className="h-4 w-4 mr-1" />
+                    {taskAssigneeFilter === 'unassigned'
+                      ? 'Unassigned'
+                      : taskAssigneeFilter
+                        ? uniqueAssignees.find(a => a.id === taskAssigneeFilter)?.name || 'Filter'
+                        : 'Filter by Assignee'}
+                  </button>
+
+                  {isTaskFilterDropdownOpen && (
+                    <>
+                      <div
+                        className="fixed inset-0 z-10"
+                        onClick={() => setIsTaskFilterDropdownOpen(false)}
+                      />
+                      <div className="absolute right-0 top-full mt-2 w-56 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg z-20">
+                        <div className="p-2 border-b border-slate-200 dark:border-slate-700">
+                          <button
+                            onClick={() => {
+                              setTaskAssigneeFilter(null)
+                              setIsTaskFilterDropdownOpen(false)
+                            }}
+                            className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
+                              !taskAssigneeFilter
+                                ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300'
+                                : 'hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'
+                            }`}
+                          >
+                            All Tasks
+                          </button>
+                        </div>
+                        {hasUnassignedTasks && (
+                          <div className="p-2 border-b border-slate-200 dark:border-slate-700">
+                            <button
+                              onClick={() => {
+                                setTaskAssigneeFilter('unassigned')
+                                setIsTaskFilterDropdownOpen(false)
+                              }}
+                              className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
+                                taskAssigneeFilter === 'unassigned'
+                                  ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300'
+                                  : 'hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'
+                              }`}
+                            >
+                              <User className="h-4 w-4 inline mr-2 opacity-50" />
+                              Unassigned
+                            </button>
+                          </div>
+                        )}
+                        {uniqueAssignees.length > 0 && (
+                          <div className="max-h-48 overflow-y-auto p-2">
+                            {uniqueAssignees.map((assignee) => (
+                              <button
+                                key={assignee.id}
+                                onClick={() => {
+                                  setTaskAssigneeFilter(assignee.id)
+                                  setIsTaskFilterDropdownOpen(false)
+                                }}
+                                className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
+                                  taskAssigneeFilter === assignee.id
+                                    ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300'
+                                    : 'hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'
+                                }`}
+                              >
+                                <User className="h-4 w-4 inline mr-2" />
+                                {assignee.name}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+                <button
+                  onClick={() => setIsAddTaskModalOpen(true)}
+                  className="btn-primary text-sm"
+                >
+                  <Plus className="h-4 w-4 mr-1" />
+                  Add Task
+                </button>
+              </div>
             </div>
+            {/* Active Filter Display */}
+            {taskAssigneeFilter && (
+              <div className="flex items-center gap-2 mb-4">
+                <span className="text-sm text-slate-500 dark:text-slate-400">Filtering by:</span>
+                <span className="inline-flex items-center gap-1 px-2 py-1 bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300 text-sm rounded-full">
+                  <User className="h-3 w-3" />
+                  {taskAssigneeFilter === 'unassigned'
+                    ? 'Unassigned'
+                    : uniqueAssignees.find(a => a.id === taskAssigneeFilter)?.name}
+                  <button
+                    onClick={() => setTaskAssigneeFilter(null)}
+                    className="ml-1 hover:text-primary-900 dark:hover:text-primary-100"
+                    aria-label="Clear filter"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              </div>
+            )}
             {/* Quick Add Task Input */}
             <form onSubmit={handleQuickAddTask} className="mb-4">
               <div className="flex items-center gap-2">
@@ -699,15 +827,15 @@ export function ProjectDetailPage() {
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
                 <p className="mt-4 text-slate-500 dark:text-slate-400">Loading tasks...</p>
               </div>
-            ) : tasks.length === 0 ? (
+            ) : filteredTasks.length === 0 ? (
               <div className="text-center py-8 text-slate-500 dark:text-slate-400">
                 <CheckSquare className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                <p>No tasks yet</p>
-                <p className="text-sm">Create tasks to track project progress</p>
+                <p>{taskAssigneeFilter ? 'No tasks match the current filter' : 'No tasks yet'}</p>
+                <p className="text-sm">{taskAssigneeFilter ? 'Try a different filter or clear the filter' : 'Create tasks to track project progress'}</p>
               </div>
             ) : (
               <div className="space-y-3">
-                {tasks.map((task) => {
+                {filteredTasks.map((task) => {
                   const hasSubtasks = task.subtasks && task.subtasks.length > 0
                   const isExpanded = expandedTasks.has(task.id)
                   const subtaskProgress = getSubtaskProgress(task.subtasks || [])
