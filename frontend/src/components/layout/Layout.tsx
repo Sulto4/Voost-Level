@@ -9,6 +9,13 @@ export function Layout() {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-background-dark">
+      {/* Skip to content link for keyboard accessibility */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:px-4 focus:py-2 focus:bg-primary-600 focus:text-white focus:rounded-lg focus:shadow-lg"
+      >
+        Skip to content
+      </a>
       <Sidebar />
       <MobileSidebar
         isOpen={isMobileSidebarOpen}
@@ -16,7 +23,7 @@ export function Layout() {
       />
       <div className="lg:pl-64">
         <Header onMenuClick={() => setIsMobileSidebarOpen(true)} />
-        <main className="p-6">
+        <main id="main-content" className="p-6" tabIndex={-1}>
           <Outlet />
         </main>
       </div>
