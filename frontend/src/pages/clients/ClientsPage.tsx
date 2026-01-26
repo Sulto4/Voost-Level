@@ -701,20 +701,44 @@ export function ClientsPage() {
       return
     }
 
-    // Create CSV content
-    const headers = ['Name', 'Company', 'Email', 'Phone', 'Status', 'Value', 'Source', 'Website', 'Notes', 'Created']
-    const rows = exportData.map(client => [
-      client.name || '',
-      client.company || '',
-      client.email || '',
-      client.phone || '',
-      client.status || '',
-      client.value?.toString() || '',
-      client.source || '',
-      client.website || '',
-      (client.notes || '').replace(/"/g, '""'), // Escape quotes in notes
-      client.created_at ? new Date(client.created_at).toLocaleDateString() : ''
-    ])
+    // Collect all unique custom field keys
+    const customFieldKeys = new Set<string>()
+    exportData.forEach(client => {
+      if (client.custom_fields && typeof client.custom_fields === 'object') {
+        Object.keys(client.custom_fields as Record<string, unknown>).forEach(key => {
+          if (key !== 'tags') customFieldKeys.add(key)
+        })
+      }
+    })
+    const customFieldHeaders = Array.from(customFieldKeys).sort()
+
+    // Create CSV content with custom fields
+    const headers = ['Name', 'Company', 'Email', 'Phone', 'Status', 'Value', 'Source', 'Website', 'Notes', 'Tags', ...customFieldHeaders, 'Created']
+    const rows = exportData.map(client => {
+      const customFields = client.custom_fields as Record<string, unknown> | null
+      const tags = customFields?.tags
+      const tagsString = Array.isArray(tags) ? tags.join('; ') : ''
+
+      return [
+        client.name || '',
+        client.company || '',
+        client.email || '',
+        client.phone || '',
+        client.status || '',
+        client.value?.toString() || '',
+        client.source || '',
+        client.website || '',
+        (client.notes || '').replace(/"/g, '""'), // Escape quotes in notes
+        tagsString,
+        ...customFieldHeaders.map(key => {
+          const value = customFields?.[key]
+          if (typeof value === 'string') return value.replace(/"/g, '""')
+          if (Array.isArray(value)) return value.join('; ').replace(/"/g, '""')
+          return value?.toString() || ''
+        }),
+        client.created_at ? new Date(client.created_at).toLocaleDateString() : ''
+      ]
+    })
 
     // Build CSV string
     const csvContent = [
