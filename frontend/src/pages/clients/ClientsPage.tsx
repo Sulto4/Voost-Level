@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
-import { Plus, Search, Filter, MoreHorizontal, Building2, Mail, Phone, ChevronLeft, ChevronRight, X, Download, Upload, Trash2, CheckSquare, AlertTriangle } from 'lucide-react'
+import { Link, useSearchParams } from 'react-router-dom'
+import { Plus, Search, Filter, MoreHorizontal, Building2, Mail, Phone, ChevronLeft, ChevronRight, X, Download, Upload, Trash2, CheckSquare, AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown, Save, FolderOpen, RotateCcw, Archive } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import { AddClientModal } from '../../components/clients/AddClientModal'
@@ -11,9 +11,21 @@ import type { Client, ClientStatus } from '../../types/database'
 const ITEMS_PER_PAGE = 20
 
 type DateFilter = 'today' | 'this_week' | 'this_month' | null
+type SortField = 'name' | 'created_at' | 'value' | 'status'
+type SortDirection = 'asc' | 'desc'
+
+interface FilterPreset {
+  id: string
+  name: string
+  statusFilter: ClientStatus | null
+  dateFilter: DateFilter
+  sourceFilter: string | null
+  createdAt: string
+}
 
 export function ClientsPage() {
   const { currentWorkspace } = useWorkspace()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [searchQuery, setSearchQuery] = useState('')
   const [clients, setClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
@@ -23,11 +35,95 @@ export function ClientsPage() {
   const [totalCount, setTotalCount] = useState(0)
   const [statusFilter, setStatusFilter] = useState<ClientStatus | null>(null)
   const [dateFilter, setDateFilter] = useState<DateFilter>(null)
+  const [sourceFilter, setSourceFilter] = useState<string | null>(null)
+  const [availableSources, setAvailableSources] = useState<string[]>([])
   const [showFilters, setShowFilters] = useState(false)
+  const [sortField, setSortField] = useState<SortField>('created_at')
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
   const [selectedClients, setSelectedClients] = useState<Set<string>>(new Set())
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [deleteSuccess, setDeleteSuccess] = useState<string | null>(null)
+  const [showDeletedClients, setShowDeletedClients] = useState(false)
+  const [restoreSuccess, setRestoreSuccess] = useState<string | null>(null)
+
+  // Filter presets state
+  const [filterPresets, setFilterPresets] = useState<FilterPreset[]>([])
+  const [showSavePresetModal, setShowSavePresetModal] = useState(false)
+  const [showLoadPresetModal, setShowLoadPresetModal] = useState(false)
+  const [newPresetName, setNewPresetName] = useState('')
+  const [presetError, setPresetError] = useState('')
+  const [showExportDropdown, setShowExportDropdown] = useState(false)
+
+  // Handle ?action=add query parameter to open Add Client modal from command palette
+  useEffect(() => {
+    if (searchParams.get('action') === 'add') {
+      setIsAddModalOpen(true)
+      // Clear the query parameter to avoid reopening on refresh
+      setSearchParams({}, { replace: true })
+    }
+  }, [searchParams, setSearchParams])
+
+  // Load saved filter presets from localStorage on mount
+  useEffect(() => {
+    const savedPresets = localStorage.getItem('clientFilterPresets')
+    if (savedPresets) {
+      try {
+        setFilterPresets(JSON.parse(savedPresets))
+      } catch {
+        console.error('Failed to load filter presets')
+      }
+    }
+  }, [])
+
+  // Save filter presets to localStorage whenever they change
+  useEffect(() => {
+    localStorage.setItem('clientFilterPresets', JSON.stringify(filterPresets))
+  }, [filterPresets])
+
+  // Save current filters as a preset
+  function saveFilterPreset() {
+    if (!newPresetName.trim()) {
+      setPresetError('Please enter a preset name')
+      return
+    }
+
+    // Check for duplicate names
+    if (filterPresets.some(p => p.name.toLowerCase() === newPresetName.trim().toLowerCase())) {
+      setPresetError('A preset with this name already exists')
+      return
+    }
+
+    const newPreset: FilterPreset = {
+      id: Date.now().toString(),
+      name: newPresetName.trim(),
+      statusFilter,
+      dateFilter,
+      sourceFilter,
+      createdAt: new Date().toISOString()
+    }
+
+    setFilterPresets([...filterPresets, newPreset])
+    setNewPresetName('')
+    setPresetError('')
+    setShowSavePresetModal(false)
+  }
+
+  // Load a saved filter preset
+  function loadFilterPreset(preset: FilterPreset) {
+    setStatusFilter(preset.statusFilter)
+    setDateFilter(preset.dateFilter)
+    setSourceFilter(preset.sourceFilter)
+    setShowLoadPresetModal(false)
+  }
+
+  // Delete a filter preset
+  function deleteFilterPreset(presetId: string) {
+    setFilterPresets(filterPresets.filter(p => p.id !== presetId))
+  }
+
+  // Check if any filter is active
+  const hasActiveFilters = statusFilter !== null || dateFilter !== null || sourceFilter !== null
 
   // Get date range based on filter (timezone-aware using local dates)
   function getDateRange(filter: DateFilter): { start: string; end: string } | null {
@@ -71,13 +167,82 @@ export function ClientsPage() {
   useEffect(() => {
     if (currentWorkspace) {
       fetchClients()
+      fetchAvailableSources()
     }
-  }, [currentWorkspace, currentPage, statusFilter, dateFilter])
+  }, [currentWorkspace, currentPage, statusFilter, dateFilter, sourceFilter, sortField, sortDirection, showDeletedClients])
+
+  // Supabase Realtime subscription for live updates
+  useEffect(() => {
+    if (!currentWorkspace) return
+
+    const channel = supabase
+      .channel(`clients:${currentWorkspace.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*', // Listen to all events (INSERT, UPDATE, DELETE)
+          schema: 'public',
+          table: 'clients',
+          filter: `workspace_id=eq.${currentWorkspace.id}`
+        },
+        (payload) => {
+          console.log('Realtime client change:', payload.eventType, payload)
+
+          if (payload.eventType === 'INSERT') {
+            // Add new client to the list if we're on page 1 and not in deleted view
+            if (currentPage === 1 && !showDeletedClients && !payload.new.deleted_at) {
+              setClients(prev => {
+                // Check if client already exists (avoid duplicates)
+                if (prev.some(c => c.id === payload.new.id)) return prev
+                // Add to beginning of list
+                const newClients = [payload.new as Client, ...prev]
+                // Trim to page size
+                return newClients.slice(0, ITEMS_PER_PAGE)
+              })
+              setTotalCount(prev => prev + 1)
+            } else {
+              // Refresh to get accurate data
+              fetchClients()
+            }
+          } else if (payload.eventType === 'UPDATE') {
+            // Update existing client in the list
+            setClients(prev => prev.map(client =>
+              client.id === payload.new.id ? payload.new as Client : client
+            ))
+          } else if (payload.eventType === 'DELETE') {
+            // Remove client from the list
+            setClients(prev => prev.filter(client => client.id !== payload.old.id))
+            setTotalCount(prev => Math.max(0, prev - 1))
+          }
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [currentWorkspace, currentPage, showDeletedClients])
+
+  // Fetch unique sources for the filter dropdown
+  async function fetchAvailableSources() {
+    if (!currentWorkspace) return
+
+    const { data, error } = await supabase
+      .from('clients')
+      .select('source')
+      .eq('workspace_id', currentWorkspace.id)
+      .not('source', 'is', null)
+
+    if (!error && data) {
+      const uniqueSources = [...new Set(data.map(c => c.source).filter(Boolean))] as string[]
+      setAvailableSources(uniqueSources.sort())
+    }
+  }
 
   // Reset to page 1 when search query or filters change
   useEffect(() => {
     setCurrentPage(1)
-  }, [searchQuery, statusFilter, dateFilter])
+  }, [searchQuery, statusFilter, dateFilter, sourceFilter])
 
   async function fetchClients() {
     if (!currentWorkspace) return
@@ -90,6 +255,13 @@ export function ClientsPage() {
       .select('*', { count: 'exact', head: true })
       .eq('workspace_id', currentWorkspace.id)
 
+    // Filter by deleted status
+    if (showDeletedClients) {
+      countQuery = countQuery.not('deleted_at', 'is', null)
+    } else {
+      countQuery = countQuery.is('deleted_at', null)
+    }
+
     // Apply status filter to count query
     if (statusFilter) {
       countQuery = countQuery.eq('status', statusFilter)
@@ -99,6 +271,11 @@ export function ClientsPage() {
     const dateRange = getDateRange(dateFilter)
     if (dateRange) {
       countQuery = countQuery.gte('created_at', dateRange.start).lt('created_at', dateRange.end)
+    }
+
+    // Apply source filter to count query
+    if (sourceFilter) {
+      countQuery = countQuery.eq('source', sourceFilter)
     }
 
     const { count, error: countError } = await countQuery
@@ -118,6 +295,13 @@ export function ClientsPage() {
       .select('*')
       .eq('workspace_id', currentWorkspace.id)
 
+    // Filter by deleted status
+    if (showDeletedClients) {
+      dataQuery = dataQuery.not('deleted_at', 'is', null)
+    } else {
+      dataQuery = dataQuery.is('deleted_at', null)
+    }
+
     // Apply status filter to data query
     if (statusFilter) {
       dataQuery = dataQuery.eq('status', statusFilter)
@@ -128,8 +312,13 @@ export function ClientsPage() {
       dataQuery = dataQuery.gte('created_at', dateRange.start).lt('created_at', dateRange.end)
     }
 
+    // Apply source filter to data query
+    if (sourceFilter) {
+      dataQuery = dataQuery.eq('source', sourceFilter)
+    }
+
     const { data, error } = await dataQuery
-      .order('created_at', { ascending: false })
+      .order(sortField, { ascending: sortDirection === 'asc' })
       .range(from, to)
 
     if (error) {
@@ -177,6 +366,28 @@ export function ClientsPage() {
     churned: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
   }
 
+  // Toggle sort direction or change sort field
+  function handleSort(field: SortField) {
+    if (sortField === field) {
+      // Toggle direction if same field
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')
+    } else {
+      // Set new field with default direction
+      setSortField(field)
+      setSortDirection(field === 'name' ? 'asc' : 'desc')
+    }
+  }
+
+  // Render sort icon for column header
+  function SortIcon({ field }: { field: SortField }) {
+    if (sortField !== field) {
+      return <ArrowUpDown className="h-4 w-4 ml-1 text-slate-400" />
+    }
+    return sortDirection === 'asc'
+      ? <ArrowUp className="h-4 w-4 ml-1 text-primary-600 dark:text-primary-400" />
+      : <ArrowDown className="h-4 w-4 ml-1 text-primary-600 dark:text-primary-400" />
+  }
+
   // Bulk selection functions
   function toggleClientSelection(clientId: string) {
     setSelectedClients(prev => {
@@ -205,7 +416,7 @@ export function ClientsPage() {
   const isAllSelected = filteredClients.length > 0 && selectedClients.size === filteredClients.length
   const isSomeSelected = selectedClients.size > 0 && selectedClients.size < filteredClients.length
 
-  // Bulk delete selected clients
+  // Bulk soft delete selected clients (set deleted_at)
   async function handleBulkDelete() {
     if (selectedClients.size === 0) return
 
@@ -214,27 +425,53 @@ export function ClientsPage() {
 
     const { error } = await supabase
       .from('clients')
-      .delete()
+      .update({ deleted_at: new Date().toISOString() })
       .in('id', clientIds)
 
     if (error) {
       console.error('Error deleting clients:', error)
       alert('Failed to delete clients. Please try again.')
     } else {
-      setDeleteSuccess(`Successfully deleted ${clientIds.length} client${clientIds.length > 1 ? 's' : ''}`)
+      setDeleteSuccess(`Successfully deleted ${clientIds.length} client${clientIds.length > 1 ? 's' : ''}. You can restore them from the Deleted view.`)
       setSelectedClients(new Set())
       fetchClients()
-      // Clear success message after 3 seconds
-      setTimeout(() => setDeleteSuccess(null), 3000)
+      // Clear success message after 4 seconds
+      setTimeout(() => setDeleteSuccess(null), 4000)
     }
 
     setIsDeleting(false)
     setIsDeleteModalOpen(false)
   }
 
-  // Export filtered clients to CSV
-  async function exportToCSV() {
-    if (!currentWorkspace) return
+  // Restore selected deleted clients
+  async function handleBulkRestore() {
+    if (selectedClients.size === 0) return
+
+    setIsDeleting(true) // Reusing the deleting state for loading
+    const clientIds = Array.from(selectedClients)
+
+    const { error } = await supabase
+      .from('clients')
+      .update({ deleted_at: null })
+      .in('id', clientIds)
+
+    if (error) {
+      console.error('Error restoring clients:', error)
+      alert('Failed to restore clients. Please try again.')
+    } else {
+      setRestoreSuccess(`Successfully restored ${clientIds.length} client${clientIds.length > 1 ? 's' : ''}`)
+      setSelectedClients(new Set())
+      fetchClients()
+      // Clear success message after 3 seconds
+      setTimeout(() => setRestoreSuccess(null), 3000)
+    }
+
+    setIsDeleting(false)
+  }
+
+  // Helper function to fetch export data
+  async function fetchExportData() {
+    if (!currentWorkspace) return null
 
     // Build query with current filters to get ALL filtered data (not just current page)
     let query = supabase
@@ -257,7 +494,7 @@ export function ClientsPage() {
 
     if (error) {
       console.error('Error fetching clients for export:', error)
-      return
+      return null
     }
 
     let exportData = data || []
@@ -273,7 +510,13 @@ export function ClientsPage() {
       )
     }
 
-    if (exportData.length === 0) {
+    return exportData
+  }
+
+  // Export filtered clients to CSV
+  async function exportToCSV() {
+    const exportData = await fetchExportData()
+    if (!exportData || exportData.length === 0) {
       alert('No clients to export')
       return
     }
@@ -311,24 +554,85 @@ export function ClientsPage() {
     document.body.removeChild(link)
   }
 
+  // Export filtered clients to JSON
+  async function exportToJSON() {
+    const exportData = await fetchExportData()
+    if (!exportData || exportData.length === 0) {
+      alert('No clients to export')
+      return
+    }
+
+    // Format data for JSON export (clean structure)
+    const jsonData = exportData.map(client => ({
+      name: client.name || '',
+      company: client.company || null,
+      email: client.email || null,
+      phone: client.phone || null,
+      status: client.status || '',
+      value: client.value || null,
+      source: client.source || null,
+      website: client.website || null,
+      notes: client.notes || null,
+      created_at: client.created_at || null
+    }))
+
+    // Create JSON content with pretty formatting
+    const jsonContent = JSON.stringify(jsonData, null, 2)
+
+    // Create and trigger download
+    const blob = new Blob([jsonContent], { type: 'application/json;charset=utf-8;' })
+    const link = document.createElement('a')
+    const url = URL.createObjectURL(blob)
+    link.setAttribute('href', url)
+    link.setAttribute('download', `clients-export-${new Date().toISOString().split('T')[0]}.json`)
+    link.style.visibility = 'hidden'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-            Clients
+            {showDeletedClients ? 'Deleted Clients' : 'Clients'}
           </h1>
           <p className="text-slate-500 dark:text-slate-400">
-            Manage your clients and leads
+            {showDeletedClients ? 'View and restore deleted clients' : 'Manage your clients and leads'}
           </p>
         </div>
-        <button
-          onClick={() => setIsAddModalOpen(true)}
-          className="btn-primary"
-        >
-          <Plus className="h-5 w-5 mr-2" />
-          Add Client
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => {
+              setShowDeletedClients(!showDeletedClients)
+              setSelectedClients(new Set())
+              setCurrentPage(1)
+            }}
+            className={`btn-outline min-h-[44px] ${showDeletedClients ? 'border-red-300 text-red-600 dark:border-red-700 dark:text-red-400' : ''}`}
+          >
+            {showDeletedClients ? (
+              <>
+                <RotateCcw className="h-5 w-5 mr-2" />
+                Back to Active
+              </>
+            ) : (
+              <>
+                <Archive className="h-5 w-5 mr-2" />
+                View Deleted
+              </>
+            )}
+          </button>
+          {!showDeletedClients && (
+            <button
+              onClick={() => setIsAddModalOpen(true)}
+              className="btn-primary"
+            >
+              <Plus className="h-5 w-5 mr-2" />
+              Add Client
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Filters and Search */}
@@ -351,14 +655,40 @@ export function ClientsPage() {
           <Upload className="h-5 w-5 mr-2" />
           Import
         </button>
-        <button
-          onClick={exportToCSV}
-          className="btn-outline min-h-[44px]"
-          title="Export filtered clients to CSV"
-        >
-          <Download className="h-5 w-5 mr-2" />
-          Export
-        </button>
+        <div className="relative">
+          <button
+            onClick={() => setShowExportDropdown(!showExportDropdown)}
+            className="btn-outline min-h-[44px]"
+            title="Export filtered clients"
+          >
+            <Download className="h-5 w-5 mr-2" />
+            Export
+          </button>
+          {showExportDropdown && (
+            <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 z-10">
+              <div className="py-1">
+                <button
+                  onClick={() => {
+                    exportToCSV()
+                    setShowExportDropdown(false)
+                  }}
+                  className="w-full px-4 py-2 text-left text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                >
+                  Export as CSV
+                </button>
+                <button
+                  onClick={() => {
+                    exportToJSON()
+                    setShowExportDropdown(false)
+                  }}
+                  className="w-full px-4 py-2 text-left text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                >
+                  Export as JSON
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
         <div className="relative">
           <button
             onClick={() => setShowFilters(!showFilters)}
@@ -366,22 +696,45 @@ export function ClientsPage() {
           >
             <Filter className="h-5 w-5 mr-2" />
             Filters
-            {(statusFilter || dateFilter) && (
+            {(statusFilter || dateFilter || sourceFilter) && (
               <span className="ml-2 px-1.5 py-0.5 text-xs bg-primary-100 dark:bg-primary-900/30 rounded">
-                {(statusFilter ? 1 : 0) + (dateFilter ? 1 : 0)}
+                {(statusFilter ? 1 : 0) + (dateFilter ? 1 : 0) + (sourceFilter ? 1 : 0)}
               </span>
             )}
           </button>
+          {/* Save Filter Preset Button */}
+          {hasActiveFilters && (
+            <button
+              onClick={() => setShowSavePresetModal(true)}
+              className="btn-outline min-h-[44px]"
+              title="Save current filters as preset"
+            >
+              <Save className="h-5 w-5 mr-2" />
+              Save Filter
+            </button>
+          )}
+          {/* Load Filter Preset Button */}
+          {filterPresets.length > 0 && (
+            <button
+              onClick={() => setShowLoadPresetModal(true)}
+              className="btn-outline min-h-[44px]"
+              title="Load saved filter preset"
+            >
+              <FolderOpen className="h-5 w-5 mr-2" />
+              Load Preset
+            </button>
+          )}
           {showFilters && (
             <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 z-10">
               <div className="p-4">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-sm font-medium text-slate-900 dark:text-white">Filters</h3>
-                  {(statusFilter || dateFilter) && (
+                  {(statusFilter || dateFilter || sourceFilter) && (
                     <button
                       onClick={() => {
                         setStatusFilter(null)
                         setDateFilter(null)
+                        setSourceFilter(null)
                         setShowFilters(false)
                       }}
                       className="text-xs text-primary-600 hover:text-primary-700"
@@ -440,6 +793,28 @@ export function ClientsPage() {
                       ))}
                     </div>
                   </div>
+                  {availableSources.length > 0 && (
+                    <div>
+                      <label className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-2 block">Source</label>
+                      <div className="space-y-1 max-h-32 overflow-y-auto">
+                        {availableSources.map((source) => (
+                          <button
+                            key={source}
+                            onClick={() => {
+                              setSourceFilter(sourceFilter === source ? null : source)
+                            }}
+                            className={`w-full px-3 py-2 text-left text-sm rounded-lg transition-colors ${
+                              sourceFilter === source
+                                ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300'
+                                : 'hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'
+                            }`}
+                          >
+                            {source}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -448,7 +823,7 @@ export function ClientsPage() {
       </div>
 
       {/* Active Filters */}
-      {(statusFilter || dateFilter) && (
+      {(statusFilter || dateFilter || sourceFilter) && (
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-sm text-slate-500 dark:text-slate-400">Filtered by:</span>
           {statusFilter && (
@@ -475,6 +850,18 @@ export function ClientsPage() {
               </button>
             </span>
           )}
+          {sourceFilter && (
+            <span className="inline-flex items-center gap-1 px-2 py-1 bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 rounded-full text-sm">
+              Source: {sourceFilter}
+              <button
+                onClick={() => setSourceFilter(null)}
+                className="hover:text-primary-900 dark:hover:text-primary-100"
+                aria-label="Clear source filter"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          )}
         </div>
       )}
 
@@ -488,12 +875,22 @@ export function ClientsPage() {
         </div>
       )}
 
+      {/* Restore Success Message */}
+      {restoreSuccess && (
+        <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4 flex items-center gap-3">
+          <RotateCcw className="h-5 w-5 text-green-600 dark:text-green-400" />
+          <span className="text-sm font-medium text-green-700 dark:text-green-300">
+            {restoreSuccess}
+          </span>
+        </div>
+      )}
+
       {/* Bulk Action Bar */}
       {selectedClients.size > 0 && (
-        <div className="bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800 rounded-lg p-4 flex items-center justify-between">
+        <div className={`${showDeletedClients ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800' : 'bg-primary-50 dark:bg-primary-900/20 border-primary-200 dark:border-primary-800'} border rounded-lg p-4 flex items-center justify-between`}>
           <div className="flex items-center gap-3">
-            <CheckSquare className="h-5 w-5 text-primary-600 dark:text-primary-400" />
-            <span className="text-sm font-medium text-primary-700 dark:text-primary-300">
+            <CheckSquare className={`h-5 w-5 ${showDeletedClients ? 'text-amber-600 dark:text-amber-400' : 'text-primary-600 dark:text-primary-400'}`} />
+            <span className={`text-sm font-medium ${showDeletedClients ? 'text-amber-700 dark:text-amber-300' : 'text-primary-700 dark:text-primary-300'}`}>
               {selectedClients.size} selected
             </span>
           </div>
@@ -504,13 +901,33 @@ export function ClientsPage() {
             >
               Clear selection
             </button>
-            <button
-              onClick={() => setIsDeleteModalOpen(true)}
-              className="btn-outline text-sm py-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 border-red-200 dark:border-red-800"
-            >
-              <Trash2 className="h-4 w-4 mr-1.5" />
-              Delete selected
-            </button>
+            {showDeletedClients ? (
+              <button
+                onClick={handleBulkRestore}
+                disabled={isDeleting}
+                className="btn-outline text-sm py-1.5 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 border-green-200 dark:border-green-800"
+              >
+                {isDeleting ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-green-600 mr-1.5"></div>
+                    Restoring...
+                  </>
+                ) : (
+                  <>
+                    <RotateCcw className="h-4 w-4 mr-1.5" />
+                    Restore selected
+                  </>
+                )}
+              </button>
+            ) : (
+              <button
+                onClick={() => setIsDeleteModalOpen(true)}
+                className="btn-outline text-sm py-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 border-red-200 dark:border-red-800"
+              >
+                <Trash2 className="h-4 w-4 mr-1.5" />
+                Delete selected
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -564,16 +981,43 @@ export function ClientsPage() {
                   </button>
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                  Client
+                  <button
+                    onClick={() => handleSort('name')}
+                    className="flex items-center hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+                  >
+                    Client
+                    <SortIcon field="name" />
+                  </button>
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                  Status
+                  <button
+                    onClick={() => handleSort('status')}
+                    className="flex items-center hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+                  >
+                    Status
+                    <SortIcon field="status" />
+                  </button>
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                  Value
+                  <button
+                    onClick={() => handleSort('value')}
+                    className="flex items-center hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+                  >
+                    Value
+                    <SortIcon field="value" />
+                  </button>
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                   Source
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                  <button
+                    onClick={() => handleSort('created_at')}
+                    className="flex items-center hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+                  >
+                    Created
+                    <SortIcon field="created_at" />
+                  </button>
                 </th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                   Actions
@@ -649,6 +1093,9 @@ export function ClientsPage() {
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 dark:text-slate-400">
                     {client.source || '-'}
                   </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 dark:text-slate-400">
+                    {client.created_at ? new Date(client.created_at).toLocaleDateString() : '-'}
+                  </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right">
                     <button className="icon-btn" aria-label="Client actions">
                       <MoreHorizontal className="h-5 w-5" />
@@ -693,9 +1140,9 @@ export function ClientsPage() {
         </div>
       )}
 
-      {/* Client Stats */}
+      {/* Client Stats - Report showing client count by status */}
       {clients.length > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           <div className="card p-4">
             <p className="text-sm text-slate-500 dark:text-slate-400">Total Clients</p>
             <p className="text-2xl font-bold text-slate-900 dark:text-white">{clients.length}</p>
@@ -707,6 +1154,14 @@ export function ClientsPage() {
           <div className="card p-4">
             <p className="text-sm text-slate-500 dark:text-slate-400">Active</p>
             <p className="text-2xl font-bold text-green-600">{clients.filter(c => c.status === 'active').length}</p>
+          </div>
+          <div className="card p-4">
+            <p className="text-sm text-slate-500 dark:text-slate-400">Inactive</p>
+            <p className="text-2xl font-bold text-slate-500 dark:text-slate-400">{clients.filter(c => c.status === 'inactive').length}</p>
+          </div>
+          <div className="card p-4">
+            <p className="text-sm text-slate-500 dark:text-slate-400">Churned</p>
+            <p className="text-2xl font-bold text-red-600">{clients.filter(c => c.status === 'churned').length}</p>
           </div>
           <div className="card p-4">
             <p className="text-sm text-slate-500 dark:text-slate-400">Total Value</p>
@@ -781,6 +1236,184 @@ export function ClientsPage() {
                       Delete
                     </>
                   )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Save Filter Preset Modal */}
+      {showSavePresetModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex min-h-full items-center justify-center p-4">
+            <div
+              className="fixed inset-0 bg-black/50 transition-opacity"
+              onClick={() => {
+                setShowSavePresetModal(false)
+                setNewPresetName('')
+                setPresetError('')
+              }}
+            />
+            <div className="relative bg-white dark:bg-slate-800 rounded-lg shadow-xl max-w-md w-full p-6">
+              <div className="flex items-center gap-4 mb-4">
+                <div className="flex-shrink-0 w-12 h-12 bg-primary-100 dark:bg-primary-900/30 rounded-full flex items-center justify-center">
+                  <Save className="h-6 w-6 text-primary-600 dark:text-primary-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
+                    Save Filter Preset
+                  </h3>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    Save current filters for quick access
+                  </p>
+                </div>
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                    Preset Name
+                  </label>
+                  <input
+                    type="text"
+                    value={newPresetName}
+                    onChange={(e) => {
+                      setNewPresetName(e.target.value)
+                      setPresetError('')
+                    }}
+                    placeholder="e.g., Active High Value"
+                    className="input w-full"
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        saveFilterPreset()
+                      }
+                    }}
+                  />
+                  {presetError && (
+                    <p className="text-sm text-red-500 mt-1">{presetError}</p>
+                  )}
+                </div>
+                <div className="bg-slate-50 dark:bg-slate-900/50 rounded-lg p-3">
+                  <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-2">Filters to save:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {statusFilter && (
+                      <span className="inline-flex items-center px-2 py-1 bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 rounded text-xs capitalize">
+                        Status: {statusFilter}
+                      </span>
+                    )}
+                    {dateFilter && (
+                      <span className="inline-flex items-center px-2 py-1 bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 rounded text-xs">
+                        {dateFilter === 'today' ? 'Created Today' : dateFilter === 'this_week' ? 'This Week' : 'This Month'}
+                      </span>
+                    )}
+                    {sourceFilter && (
+                      <span className="inline-flex items-center px-2 py-1 bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 rounded text-xs">
+                        Source: {sourceFilter}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <div className="flex justify-end gap-3 mt-6">
+                <button
+                  onClick={() => {
+                    setShowSavePresetModal(false)
+                    setNewPresetName('')
+                    setPresetError('')
+                  }}
+                  className="btn-outline"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveFilterPreset}
+                  className="btn-primary"
+                >
+                  <Save className="h-4 w-4 mr-2" />
+                  Save Preset
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Load Filter Preset Modal */}
+      {showLoadPresetModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex min-h-full items-center justify-center p-4">
+            <div
+              className="fixed inset-0 bg-black/50 transition-opacity"
+              onClick={() => setShowLoadPresetModal(false)}
+            />
+            <div className="relative bg-white dark:bg-slate-800 rounded-lg shadow-xl max-w-md w-full p-6">
+              <div className="flex items-center gap-4 mb-4">
+                <div className="flex-shrink-0 w-12 h-12 bg-primary-100 dark:bg-primary-900/30 rounded-full flex items-center justify-center">
+                  <FolderOpen className="h-6 w-6 text-primary-600 dark:text-primary-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
+                    Load Filter Preset
+                  </h3>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    Select a saved preset to apply
+                  </p>
+                </div>
+              </div>
+              <div className="space-y-2 max-h-80 overflow-y-auto">
+                {filterPresets.map((preset) => (
+                  <div
+                    key={preset.id}
+                    className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900/50 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors group"
+                  >
+                    <button
+                      onClick={() => loadFilterPreset(preset)}
+                      className="flex-1 text-left"
+                    >
+                      <p className="font-medium text-slate-900 dark:text-white">
+                        {preset.name}
+                      </p>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {preset.statusFilter && (
+                          <span className="text-xs text-slate-500 dark:text-slate-400 capitalize">
+                            {preset.statusFilter}
+                          </span>
+                        )}
+                        {preset.statusFilter && (preset.dateFilter || preset.sourceFilter) && (
+                          <span className="text-xs text-slate-400">•</span>
+                        )}
+                        {preset.dateFilter && (
+                          <span className="text-xs text-slate-500 dark:text-slate-400">
+                            {preset.dateFilter === 'today' ? 'Today' : preset.dateFilter === 'this_week' ? 'This Week' : 'This Month'}
+                          </span>
+                        )}
+                        {preset.dateFilter && preset.sourceFilter && (
+                          <span className="text-xs text-slate-400">•</span>
+                        )}
+                        {preset.sourceFilter && (
+                          <span className="text-xs text-slate-500 dark:text-slate-400">
+                            {preset.sourceFilter}
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => deleteFilterPreset(preset.id)}
+                      className="p-2 text-slate-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                      title="Delete preset"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div className="flex justify-end gap-3 mt-6">
+                <button
+                  onClick={() => setShowLoadPresetModal(false)}
+                  className="btn-outline"
+                >
+                  Cancel
                 </button>
               </div>
             </div>
