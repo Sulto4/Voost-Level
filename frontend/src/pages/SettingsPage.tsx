@@ -190,6 +190,12 @@ export function SettingsPage() {
   // Help expandable items state
   const [expandedHelpItems, setExpandedHelpItems] = useState<Set<string>>(new Set())
 
+  // Feedback form state
+  const [feedbackText, setFeedbackText] = useState('')
+  const [feedbackType, setFeedbackType] = useState<'bug' | 'feature' | 'general'>('general')
+  const [feedbackSubmitting, setFeedbackSubmitting] = useState(false)
+  const [feedbackSubmitted, setFeedbackSubmitted] = useState(false)
+
   // Update workspace form when currentWorkspace changes
   useEffect(() => {
     if (currentWorkspace) {
@@ -1497,7 +1503,89 @@ export function SettingsPage() {
                 ))}
               </div>
 
-              <div className="mt-8 p-4 bg-primary-50 dark:bg-primary-900/20 rounded-lg border border-primary-200 dark:border-primary-800">
+              {/* Feedback Form */}
+              <div className="mt-8 p-6 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
+                <h4 className="font-semibold text-slate-900 dark:text-white mb-2">
+                  Send Feedback
+                </h4>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
+                  Help us improve Voost Level by sharing your thoughts, reporting bugs, or suggesting features.
+                </p>
+
+                {feedbackSubmitted ? (
+                  <div className="p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg text-green-700 dark:text-green-300">
+                    <div className="flex items-center gap-2">
+                      <Check className="h-5 w-5" />
+                      <span className="font-medium">Thank you for your feedback!</span>
+                    </div>
+                    <p className="text-sm mt-1">We appreciate you taking the time to help us improve.</p>
+                    <button
+                      onClick={() => {
+                        setFeedbackSubmitted(false)
+                        setFeedbackText('')
+                        setFeedbackType('general')
+                      }}
+                      className="text-sm underline mt-2"
+                    >
+                      Submit another
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="label">Feedback Type</label>
+                      <div className="flex gap-2 mt-1">
+                        {[
+                          { value: 'general', label: 'General' },
+                          { value: 'bug', label: 'Bug Report' },
+                          { value: 'feature', label: 'Feature Request' },
+                        ].map((type) => (
+                          <button
+                            key={type.value}
+                            onClick={() => setFeedbackType(type.value as 'bug' | 'feature' | 'general')}
+                            className={clsx(
+                              'px-3 py-1.5 text-sm rounded-lg border transition-colors',
+                              feedbackType === type.value
+                                ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300'
+                                : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
+                            )}
+                          >
+                            {type.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <label htmlFor="feedbackText" className="label">Your Feedback</label>
+                      <textarea
+                        id="feedbackText"
+                        value={feedbackText}
+                        onChange={(e) => setFeedbackText(e.target.value)}
+                        placeholder="Tell us what you think..."
+                        rows={4}
+                        className="input resize-none"
+                      />
+                    </div>
+                    <button
+                      onClick={async () => {
+                        if (!feedbackText.trim()) return
+                        setFeedbackSubmitting(true)
+                        // Simulate API call
+                        await new Promise(resolve => setTimeout(resolve, 1000))
+                        setFeedbackSubmitting(false)
+                        setFeedbackSubmitted(true)
+                        showSuccess('Feedback submitted successfully!')
+                      }}
+                      disabled={feedbackSubmitting || !feedbackText.trim()}
+                      className="btn-primary"
+                    >
+                      {feedbackSubmitting ? 'Submitting...' : 'Submit Feedback'}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-6 p-4 bg-primary-50 dark:bg-primary-900/20 rounded-lg border border-primary-200 dark:border-primary-800">
                 <h4 className="font-medium text-primary-900 dark:text-primary-100 mb-2">
                   Need more help?
                 </h4>
