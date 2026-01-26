@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Search, Filter, MoreHorizontal, Calendar, DollarSign, Building2, AlertTriangle } from 'lucide-react'
+import { Plus, Search, Filter, MoreHorizontal, Calendar, DollarSign, Building2, AlertTriangle, X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import { AddProjectModal } from '../../components/projects/AddProjectModal'
@@ -16,6 +16,8 @@ export function ProjectsPage() {
   const [projects, setProjects] = useState<ProjectWithClient[]>([])
   const [loading, setLoading] = useState(true)
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
+  const [selectedClientId, setSelectedClientId] = useState<string | null>(null)
+  const [isFilterDropdownOpen, setIsFilterDropdownOpen] = useState(false)
 
   useEffect(() => {
     if (currentWorkspace) {
@@ -49,14 +51,24 @@ export function ProjectsPage() {
     setLoading(false)
   }
 
+  // Get unique clients from projects for the filter dropdown
+  const uniqueClients = projects.reduce((acc, project) => {
+    if (project.clients && !acc.find(c => c.id === project.clients?.id)) {
+      acc.push({ id: project.clients.id, name: project.clients.name, company: project.clients.company })
+    }
+    return acc
+  }, [] as { id: string; name: string; company: string | null }[]).sort((a, b) => a.name.localeCompare(b.name))
+
   const filteredProjects = projects.filter((project) => {
     const query = searchQuery.toLowerCase()
-    return (
+    const matchesSearch = (
       project.name.toLowerCase().includes(query) ||
       project.description?.toLowerCase().includes(query) ||
       project.clients?.name.toLowerCase().includes(query) ||
       project.clients?.company?.toLowerCase().includes(query)
     )
+    const matchesClientFilter = !selectedClientId || project.clients?.id === selectedClientId
+    return matchesSearch && matchesClientFilter
   })
 
   const statusColors: Record<string, string> = {
@@ -106,11 +118,98 @@ export function ProjectsPage() {
             className="input pl-10"
           />
         </div>
-        <button className="btn-outline min-h-[44px]">
-          <Filter className="h-5 w-5 mr-2" />
-          Filters
-        </button>
+        <div className="relative">
+          <button
+            className={`btn-outline min-h-[44px] ${selectedClientId ? 'ring-2 ring-primary-500' : ''}`}
+            onClick={() => setIsFilterDropdownOpen(!isFilterDropdownOpen)}
+          >
+            <Filter className="h-5 w-5 mr-2" />
+            {selectedClientId ? 'Client Filter' : 'Filters'}
+            {selectedClientId && (
+              <span className="ml-2 px-1.5 py-0.5 text-xs bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 rounded">
+                1
+              </span>
+            )}
+          </button>
+
+          {/* Filter Dropdown */}
+          {isFilterDropdownOpen && (
+            <>
+              <div
+                className="fixed inset-0 z-10"
+                onClick={() => setIsFilterDropdownOpen(false)}
+              />
+              <div className="absolute right-0 top-full mt-2 w-72 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg z-20">
+                <div className="p-4 border-b border-slate-200 dark:border-slate-700">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-medium text-slate-900 dark:text-white">
+                      Filter by Client
+                    </h3>
+                    {selectedClientId && (
+                      <button
+                        onClick={() => {
+                          setSelectedClientId(null)
+                          setIsFilterDropdownOpen(false)
+                        }}
+                        className="text-xs text-primary-600 hover:text-primary-700 dark:text-primary-400"
+                      >
+                        Clear filter
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div className="max-h-64 overflow-y-auto p-2">
+                  {uniqueClients.length === 0 ? (
+                    <p className="text-sm text-slate-500 dark:text-slate-400 p-2">
+                      No clients with projects
+                    </p>
+                  ) : (
+                    uniqueClients.map((client) => (
+                      <button
+                        key={client.id}
+                        onClick={() => {
+                          setSelectedClientId(client.id === selectedClientId ? null : client.id)
+                          setIsFilterDropdownOpen(false)
+                        }}
+                        className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
+                          selectedClientId === client.id
+                            ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300'
+                            : 'hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'
+                        }`}
+                      >
+                        <div className="font-medium">{client.name}</div>
+                        {client.company && (
+                          <div className="text-xs text-slate-500 dark:text-slate-400">
+                            {client.company}
+                          </div>
+                        )}
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
       </div>
+
+      {/* Active Filters Display */}
+      {selectedClientId && (
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-slate-500 dark:text-slate-400">Filters:</span>
+          <span className="inline-flex items-center gap-1 px-2 py-1 bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300 text-sm rounded-full">
+            <Building2 className="h-3 w-3" />
+            {uniqueClients.find(c => c.id === selectedClientId)?.name}
+            <button
+              onClick={() => setSelectedClientId(null)}
+              className="ml-1 hover:text-primary-900 dark:hover:text-primary-100"
+              aria-label="Remove filter"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </span>
+        </div>
+      )}
 
       {/* Projects List */}
       {loading ? (
