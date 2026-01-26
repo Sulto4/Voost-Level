@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { User, Building2, Palette, Bell, Shield, Webhook, Plus, Trash2, Check, X, AlertTriangle, UserCog, ClipboardList, Phone, Mail, Calendar, FileText, RefreshCw, Upload, Camera } from 'lucide-react'
+import { User, Building2, Palette, Bell, Shield, Webhook, Plus, Trash2, Check, X, AlertTriangle, UserCog, ClipboardList, Phone, Mail, Calendar, FileText, RefreshCw, Upload, Camera, Sparkles } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
@@ -17,6 +17,27 @@ const tabs = [
   { name: 'Integrations', icon: Webhook },
   { name: 'Security', icon: Shield },
   { name: 'Audit Log', icon: ClipboardList },
+  { name: "What's New", icon: Sparkles },
+]
+
+// Release notes data
+const releaseNotes = [
+  {
+    version: '0.1.0',
+    date: 'January 2026',
+    title: 'Initial Release',
+    highlights: [
+      'Complete CRM functionality with clients, projects, and pipeline management',
+      'Team collaboration with workspace invitations and role-based access',
+      'Activity tracking with calls, emails, meetings, and notes',
+      'Customizable dashboard with widget show/hide',
+      'Dark mode and light mode themes',
+      'Reports with activity trends and PDF export',
+      'Real-time search across clients and projects',
+      'Offline mode indicator',
+      'Keyboard shortcuts with command palette (Ctrl+K)',
+    ],
+  },
 ]
 
 const webhookEvents = [
@@ -1279,6 +1300,54 @@ export function SettingsPage() {
                   })}
                 </div>
               )}
+            </div>
+          )}
+
+          {activeTab === "What's New" && (
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+                  What's New
+                </h2>
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  See the latest updates and improvements to Voost Level
+                </p>
+              </div>
+
+              <div className="space-y-8">
+                {releaseNotes.map((release) => (
+                  <div key={release.version} className="border-l-4 border-primary-500 pl-4">
+                    <div className="flex items-center gap-3 mb-3">
+                      <span className="px-3 py-1 bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 rounded-full text-sm font-semibold">
+                        v{release.version}
+                      </span>
+                      <span className="text-sm text-slate-500 dark:text-slate-400">
+                        {release.date}
+                      </span>
+                    </div>
+                    <h3 className="text-lg font-medium text-slate-900 dark:text-white mb-3">
+                      {release.title}
+                    </h3>
+                    <ul className="space-y-2">
+                      {release.highlights.map((highlight, index) => (
+                        <li key={index} className="flex items-start gap-2 text-slate-600 dark:text-slate-300">
+                          <Check className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+                          <span>{highlight}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-8 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  Have feedback or feature requests? We'd love to hear from you! Contact us at{' '}
+                  <a href="mailto:support@voostlevel.com" className="text-primary-600 dark:text-primary-400 hover:underline">
+                    support@voostlevel.com
+                  </a>
+                </p>
+              </div>
             </div>
           )}
         </div>
