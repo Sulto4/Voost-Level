@@ -28,15 +28,15 @@ export function ConfirmDialog({
   const variantColors = {
     danger: {
       icon: 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400',
-      button: 'bg-red-600 hover:bg-red-700 text-white',
+      button: 'btn-danger',
     },
     warning: {
       icon: 'bg-accent-100 dark:bg-accent-900/30 text-accent dark:text-accent-400',
-      button: 'bg-accent hover:bg-accent-600 text-white',
+      button: 'btn-warning',
     },
     info: {
       icon: 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400',
-      button: 'bg-blue-600 hover:bg-blue-700 text-white',
+      button: 'btn-info',
     },
   }
 
@@ -66,7 +66,7 @@ export function ConfirmDialog({
           <button
             type="button"
             onClick={onConfirm}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center ${colors.button}`}
+            className={colors.button}
             disabled={loading}
           >
             {loading ? <LoadingSpinner size="sm" /> : confirmText}

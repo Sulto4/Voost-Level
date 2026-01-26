@@ -81,7 +81,8 @@ export function ClientsPage() {
   }
 
   const filteredClients = clients.filter((client) => {
-    const query = searchQuery.toLowerCase()
+    const query = searchQuery.trim().toLowerCase()
+    if (!query) return true // Show all clients when search is empty or only spaces
     return (
       client.name.toLowerCase().includes(query) ||
       client.company?.toLowerCase().includes(query) ||
@@ -237,14 +238,14 @@ export function ClientsPage() {
             <Search className="h-6 w-6 text-slate-400" />
           </div>
           <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">
-            {searchQuery ? 'No clients found' : 'No clients yet'}
+            {searchQuery.trim() ? 'No clients found' : 'No clients yet'}
           </h3>
           <p className="text-slate-500 dark:text-slate-400 mb-4 max-w-sm mx-auto">
-            {searchQuery
+            {searchQuery.trim()
               ? 'Try a different search term.'
               : 'Get started by adding your first client to track leads and manage relationships.'}
           </p>
-          {!searchQuery && (
+          {!searchQuery.trim() && (
             <button
               onClick={() => setIsAddModalOpen(true)}
               className="btn-primary"

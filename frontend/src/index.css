@@ -53,6 +53,18 @@
     @apply btn hover:bg-slate-100 dark:hover:bg-slate-800 focus:ring-primary-500;
   }
 
+  .btn-danger {
+    @apply btn bg-red-600 text-white hover:bg-red-700 focus:ring-red-500;
+  }
+
+  .btn-warning {
+    @apply btn bg-accent text-white hover:bg-accent-600 focus:ring-accent-500;
+  }
+
+  .btn-info {
+    @apply btn bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500;
+  }
+
   .input {
     @apply w-full px-3 py-2 min-h-[44px] border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-colors duration-150;
   }
