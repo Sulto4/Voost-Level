@@ -29,7 +29,17 @@ export function LoginPage() {
     const { error } = await signIn(email, password)
 
     if (error) {
-      setError('Invalid email or password')
+      // Handle specific error types
+      const errorMessage = error.message?.toLowerCase() || ''
+      if (errorMessage.includes('rate limit') || errorMessage.includes('too many requests')) {
+        setError('Too many login attempts. Please wait a moment and try again.')
+      } else if (errorMessage.includes('email not confirmed')) {
+        setError('Please confirm your email address before signing in.')
+      } else if (errorMessage.includes('invalid login credentials') || errorMessage.includes('invalid email or password')) {
+        setError('Invalid email or password')
+      } else {
+        setError('Invalid email or password')
+      }
       setLoading(false)
     }
     // Navigation will be handled by the useEffect when user state updates

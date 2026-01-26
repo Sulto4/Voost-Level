@@ -19,7 +19,12 @@ export function ForgotPasswordPage() {
     const { error } = await resetPassword(email)
 
     if (error) {
-      setError(error.message || 'Failed to send reset email')
+      const errorMessage = error.message?.toLowerCase() || ''
+      if (errorMessage.includes('rate limit') || errorMessage.includes('too many requests')) {
+        setError('Too many password reset attempts. Please wait a moment and try again.')
+      } else {
+        setError(error.message || 'Failed to send reset email')
+      }
     } else {
       setSuccess(true)
     }

@@ -41,7 +41,14 @@ export function RegisterPage() {
     const { error } = await signUp(email, password, fullName)
 
     if (error) {
-      setError(error.message || 'Failed to create account')
+      const errorMessage = error.message?.toLowerCase() || ''
+      if (errorMessage.includes('rate limit') || errorMessage.includes('too many requests')) {
+        setError('Too many signup attempts. Please wait a moment and try again.')
+      } else if (errorMessage.includes('already registered') || errorMessage.includes('user already exists')) {
+        setError('An account with this email already exists.')
+      } else {
+        setError(error.message || 'Failed to create account')
+      }
       setLoading(false)
     } else {
       setSuccess(true)
