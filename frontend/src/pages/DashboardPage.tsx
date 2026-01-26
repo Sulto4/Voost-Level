@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { Users, FolderKanban, DollarSign, TrendingUp, MessageSquare, Phone, Mail, Calendar, CheckSquare, ArrowRightLeft, ChevronDown, Settings2, X, GripVertical } from 'lucide-react'
+import { Users, FolderKanban, DollarSign, TrendingUp, MessageSquare, Phone, Mail, Calendar, CheckSquare, ArrowRightLeft, ChevronDown, Settings2, X, GripVertical, Pin, Building2 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { supabase } from '../lib/supabase'
 import { useWorkspace } from '../context/WorkspaceContext'
@@ -9,7 +9,7 @@ import type { Activity, Client, Profile } from '../types/database'
 
 type DateRange = '7d' | '30d' | '90d' | 'year' | 'all'
 
-type WidgetId = 'stats' | 'recentActivity' | 'pipelineOverview'
+type WidgetId = 'stats' | 'pinnedClients' | 'recentActivity' | 'pipelineOverview'
 
 interface WidgetConfig {
   id: WidgetId
@@ -19,6 +19,7 @@ interface WidgetConfig {
 
 const DEFAULT_WIDGETS: WidgetConfig[] = [
   { id: 'stats', name: 'Statistics Cards', visible: true },
+  { id: 'pinnedClients', name: 'Pinned Clients', visible: true },
   { id: 'recentActivity', name: 'Recent Activity', visible: true },
   { id: 'pipelineOverview', name: 'Pipeline Overview', visible: true },
 ]
@@ -69,6 +70,8 @@ export function DashboardPage() {
     winRate: 0,
   })
   const [recentActivities, setRecentActivities] = useState<ActivityWithDetails[]>([])
+  const [pinnedClients, setPinnedClients] = useState<Client[]>([])
+  const [pinnedClientIds, setPinnedClientIds] = useState<string[]>([])
 
   const dateRangeOptions: { value: DateRange; label: string }[] = [
     { value: '7d', label: 'Last 7 days' },
@@ -149,6 +152,59 @@ export function DashboardPage() {
       fetchDashboardStats()
     }
   }, [currentWorkspace, dateRange])
+
+  // Load pinned client IDs from localStorage
+  useEffect(() => {
+    const savedPinned = localStorage.getItem('pinnedClientIds')
+    if (savedPinned) {
+      try {
+        const ids = JSON.parse(savedPinned) as string[]
+        setPinnedClientIds(ids)
+      } catch {
+        console.error('Failed to load pinned clients')
+      }
+    }
+  }, [])
+
+  // Fetch pinned client details when IDs change
+  useEffect(() => {
+    if (pinnedClientIds.length > 0 && currentWorkspace) {
+      fetchPinnedClients()
+    } else {
+      setPinnedClients([])
+    }
+  }, [pinnedClientIds, currentWorkspace])
+
+  async function fetchPinnedClients() {
+    if (!currentWorkspace || pinnedClientIds.length === 0) {
+      setPinnedClients([])
+      return
+    }
+
+    const { data, error } = await supabase
+      .from('clients')
+      .select('*')
+      .in('id', pinnedClientIds)
+      .eq('workspace_id', currentWorkspace.id)
+      .is('deleted_at', null)
+
+    if (error) {
+      console.error('Error fetching pinned clients:', error)
+    } else {
+      // Sort by the order they appear in pinnedClientIds
+      const sorted = (data || []).sort((a, b) => {
+        return pinnedClientIds.indexOf(a.id) - pinnedClientIds.indexOf(b.id)
+      })
+      setPinnedClients(sorted)
+    }
+  }
+
+  // Unpin a client from dashboard
+  function unpinClient(clientId: string) {
+    const newIds = pinnedClientIds.filter(id => id !== clientId)
+    setPinnedClientIds(newIds)
+    localStorage.setItem('pinnedClientIds', JSON.stringify(newIds))
+  }
 
   // Toggle widget visibility
   function toggleWidget(widgetId: WidgetId) {
@@ -547,6 +603,61 @@ export function DashboardPage() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Pinned Clients */}
+      {isWidgetVisible('pinnedClients') && pinnedClients.length > 0 && (
+        <div className="space-y-4">
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+            <Pin className="h-5 w-5 text-primary-500" />
+            Pinned Clients
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {pinnedClients.map((client) => (
+              <Link
+                key={client.id}
+                to={`/clients/${client.id}`}
+                className="card p-4 hover:shadow-md transition-all group relative"
+              >
+                <button
+                  onClick={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    unpinClient(client.id)
+                  }}
+                  className="absolute top-2 right-2 p-1.5 rounded-full text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 opacity-0 group-hover:opacity-100 transition-opacity"
+                  title="Unpin from dashboard"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+                <div className="flex items-start gap-3">
+                  <div className="h-10 w-10 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center text-primary-600 dark:text-primary-400 font-semibold flex-shrink-0">
+                    {client.name[0].toUpperCase()}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium text-slate-900 dark:text-white truncate">
+                      {client.name}
+                    </p>
+                    {client.company && (
+                      <p className="text-sm text-slate-500 dark:text-slate-400 flex items-center gap-1 truncate">
+                        <Building2 className="h-3 w-3 flex-shrink-0" />
+                        {client.company}
+                      </p>
+                    )}
+                    <span className={`mt-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium capitalize ${
+                      client.status === 'active' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' :
+                      client.status === 'lead' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300' :
+                      client.status === 'inactive' ? 'bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-300' :
+                      'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
+                    }`}>
+                      {client.status}
+                    </span>
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
         </div>
       )}
 

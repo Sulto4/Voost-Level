@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, Link, useNavigate, useLocation } from 'react-router-dom'
-import { ArrowLeft, Edit, Trash2, Mail, Phone, Globe, Building2, Plus, Calendar, DollarSign, MessageSquare, Users, CheckSquare, Download, Code, Star, User, RotateCcw, Filter, X } from 'lucide-react'
+import { ArrowLeft, Edit, Trash2, Mail, Phone, Globe, Building2, Plus, Calendar, DollarSign, MessageSquare, Users, CheckSquare, Download, Code, Star, User, RotateCcw, Filter, X, Pin } from 'lucide-react'
 import { clsx } from 'clsx'
 import { supabase } from '../../lib/supabase'
 import { formatRelativeTime } from '../../lib/dateUtils'
@@ -262,6 +262,46 @@ export function ClientDetailPage() {
     }
     localStorage.setItem('favoriteClientIds', JSON.stringify(favIds))
     setIsFavorite(!isFavorite)
+  }
+
+  // Pin to Dashboard functionality (stored in localStorage)
+  const [isPinned, setIsPinned] = useState(false)
+
+  // Load pinned status on mount
+  useEffect(() => {
+    if (!id) return
+    const savedPinned = localStorage.getItem('pinnedClientIds')
+    if (savedPinned) {
+      try {
+        const pinIds = JSON.parse(savedPinned) as string[]
+        setIsPinned(pinIds.includes(id))
+      } catch {
+        console.error('Failed to load pinned clients')
+      }
+    }
+  }, [id])
+
+  // Toggle pin to dashboard
+  function togglePin() {
+    if (!id) return
+    const savedPinned = localStorage.getItem('pinnedClientIds')
+    let pinIds: string[] = []
+    if (savedPinned) {
+      try {
+        pinIds = JSON.parse(savedPinned) as string[]
+      } catch {
+        pinIds = []
+      }
+    }
+    if (isPinned) {
+      // Remove from pinned
+      pinIds = pinIds.filter(pid => pid !== id)
+    } else {
+      // Add to pinned
+      pinIds.push(id)
+    }
+    localStorage.setItem('pinnedClientIds', JSON.stringify(pinIds))
+    setIsPinned(!isPinned)
   }
 
   useEffect(() => {
@@ -649,6 +689,14 @@ export function ClientDetailPage() {
           </div>
         </div>
         <div className="flex items-center space-x-2 flex-shrink-0">
+          <button
+            onClick={togglePin}
+            className={`btn-outline ${isPinned ? 'text-primary-600 border-primary-300 dark:border-primary-700' : ''}`}
+            title={isPinned ? 'Unpin from dashboard' : 'Pin to dashboard'}
+          >
+            <Pin className={`h-4 w-4 sm:mr-2 ${isPinned ? 'fill-primary-500' : ''}`} />
+            <span className="hidden sm:inline">{isPinned ? 'Pinned' : 'Pin'}</span>
+          </button>
           <button
             onClick={handleExportAIContext}
             disabled={contextLoading}
