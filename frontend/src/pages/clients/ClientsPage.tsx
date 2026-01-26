@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { Plus, Search, Filter, MoreHorizontal, Building2, Mail, Phone, ChevronLeft, ChevronRight, X, Download, Upload, Trash2, CheckSquare, AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown, Save, FolderOpen, RotateCcw, Archive } from 'lucide-react'
+import { Plus, Search, Filter, MoreHorizontal, Building2, Mail, Phone, ChevronLeft, ChevronRight, X, Download, Upload, Trash2, CheckSquare, AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown, Save, FolderOpen, RotateCcw, Archive, Star } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import { AddClientModal } from '../../components/clients/AddClientModal'
@@ -101,6 +101,10 @@ export function ClientsPage() {
   const [recentSearches, setRecentSearches] = useState<string[]>([])
   const [showRecentSearches, setShowRecentSearches] = useState(false)
 
+  // Favorites state
+  const [favoriteClientIds, setFavoriteClientIds] = useState<Set<string>>(new Set())
+  const [favoritesFilter, setFavoritesFilter] = useState(false)
+
   // Search suggestions state
   const [showSearchSuggestions, setShowSearchSuggestions] = useState(false)
 
@@ -181,6 +185,24 @@ export function ClientsPage() {
     }
   }, [])
 
+  // Load favorite client IDs from localStorage on mount
+  useEffect(() => {
+    const savedFavorites = localStorage.getItem('favoriteClientIds')
+    if (savedFavorites) {
+      try {
+        const favIds = JSON.parse(savedFavorites) as string[]
+        setFavoriteClientIds(new Set(favIds))
+      } catch {
+        console.error('Failed to load favorite clients')
+      }
+    }
+  }, [])
+
+  // Save favorite client IDs to localStorage whenever they change
+  useEffect(() => {
+    localStorage.setItem('favoriteClientIds', JSON.stringify(Array.from(favoriteClientIds)))
+  }, [favoriteClientIds])
+
   // Save recent searches to localStorage whenever they change
   useEffect(() => {
     localStorage.setItem('clientRecentSearches', JSON.stringify(recentSearches))
@@ -206,6 +228,21 @@ export function ClientsPage() {
   // Clear all recent searches
   function clearRecentSearches() {
     setRecentSearches([])
+  }
+
+  // Toggle a client as favorite
+  function toggleFavorite(clientId: string, e: React.MouseEvent) {
+    e.preventDefault()
+    e.stopPropagation()
+    setFavoriteClientIds(prev => {
+      const next = new Set(prev)
+      if (next.has(clientId)) {
+        next.delete(clientId)
+      } else {
+        next.add(clientId)
+      }
+      return next
+    })
   }
 
   // Generate search suggestions based on current query
@@ -276,7 +313,7 @@ export function ClientsPage() {
   }
 
   // Check if any filter is active
-  const hasActiveFilters = statusFilter !== null || dateFilter !== null || sourceFilter !== null
+  const hasActiveFilters = statusFilter !== null || dateFilter !== null || sourceFilter !== null || favoritesFilter
 
   // Get date range based on filter (timezone-aware using local dates)
   function getDateRange(filter: DateFilter): { start: string; end: string } | null {
@@ -483,6 +520,11 @@ export function ClientsPage() {
   }
 
   const filteredClients = clients.filter((client) => {
+    // Apply favorites filter
+    if (favoritesFilter && !favoriteClientIds.has(client.id)) {
+      return false
+    }
+
     const query = searchQuery.trim().toLowerCase()
     if (!query) return true // Show all clients when search is empty or only spaces
     return (
@@ -992,9 +1034,9 @@ export function ClientsPage() {
           >
             <Filter className="h-5 w-5 mr-2" />
             Filters
-            {(statusFilter || dateFilter || sourceFilter) && (
+            {(statusFilter || dateFilter || sourceFilter || favoritesFilter) && (
               <span className="ml-2 px-1.5 py-0.5 text-xs bg-primary-100 dark:bg-primary-900/30 rounded">
-                {(statusFilter ? 1 : 0) + (dateFilter ? 1 : 0) + (sourceFilter ? 1 : 0)}
+                {(statusFilter ? 1 : 0) + (dateFilter ? 1 : 0) + (sourceFilter ? 1 : 0) + (favoritesFilter ? 1 : 0)}
               </span>
             )}
           </button>
@@ -1025,12 +1067,13 @@ export function ClientsPage() {
               <div className="p-4">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-sm font-medium text-slate-900 dark:text-white">Filters</h3>
-                  {(statusFilter || dateFilter || sourceFilter) && (
+                  {(statusFilter || dateFilter || sourceFilter || favoritesFilter) && (
                     <button
                       onClick={() => {
                         setStatusFilter(null)
                         setDateFilter(null)
                         setSourceFilter(null)
+                        setFavoritesFilter(false)
                         setShowFilters(false)
                       }}
                       className="text-xs text-primary-600 hover:text-primary-700"
@@ -1040,6 +1083,20 @@ export function ClientsPage() {
                   )}
                 </div>
                 <div className="space-y-4">
+                  {/* Favorites Filter */}
+                  <div>
+                    <button
+                      onClick={() => setFavoritesFilter(!favoritesFilter)}
+                      className={`w-full px-3 py-2 text-left text-sm rounded-lg transition-colors flex items-center ${
+                        favoritesFilter
+                          ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300'
+                          : 'hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'
+                      }`}
+                    >
+                      <Star className={`h-4 w-4 mr-2 ${favoritesFilter ? 'fill-yellow-500 text-yellow-500' : ''}`} />
+                      Favorites Only
+                    </button>
+                  </div>
                   <div>
                     <label className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-2 block">Status</label>
                     <div className="space-y-1">
@@ -1119,9 +1176,22 @@ export function ClientsPage() {
       </div>
 
       {/* Active Filters */}
-      {(statusFilter || dateFilter || sourceFilter) && (
+      {(statusFilter || dateFilter || sourceFilter || favoritesFilter) && (
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-sm text-slate-500 dark:text-slate-400">Filtered by:</span>
+          {favoritesFilter && (
+            <span className="inline-flex items-center gap-1 px-2 py-1 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 rounded-full text-sm">
+              <Star className="h-3 w-3 fill-yellow-500 text-yellow-500" />
+              Favorites
+              <button
+                onClick={() => setFavoritesFilter(false)}
+                className="hover:text-yellow-900 dark:hover:text-yellow-100"
+                aria-label="Clear favorites filter"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          )}
           {statusFilter && (
             <span className="inline-flex items-center gap-1 px-2 py-1 bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 rounded-full text-sm capitalize">
               {statusFilter}
@@ -1376,6 +1446,9 @@ export function ClientsPage() {
                           state={{ from: `/clients${searchParams.toString() ? `?${searchParams.toString()}` : ''}` }}
                           className="text-sm font-medium text-slate-900 dark:text-white hover:text-primary-600 dark:hover:text-primary-400 inline-flex items-center min-h-[44px] -my-3"
                         >
+                          {favoriteClientIds.has(client.id) && (
+                            <Star className="h-3.5 w-3.5 fill-yellow-500 text-yellow-500 mr-1.5 flex-shrink-0" />
+                          )}
                           {searchQuery ? highlightMatch(client.name, searchQuery) : client.name}
                         </Link>
                         {client.company && (
@@ -1416,9 +1489,19 @@ export function ClientsPage() {
                     {client.created_at ? new Date(client.created_at).toLocaleDateString() : '-'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right">
-                    <button className="icon-btn" aria-label="Client actions">
-                      <MoreHorizontal className="h-5 w-5" />
-                    </button>
+                    <div className="flex items-center justify-end gap-1">
+                      <button
+                        onClick={(e) => toggleFavorite(client.id, e)}
+                        className={`icon-btn ${favoriteClientIds.has(client.id) ? 'text-yellow-500' : 'text-slate-400 hover:text-yellow-500'}`}
+                        aria-label={favoriteClientIds.has(client.id) ? 'Remove from favorites' : 'Add to favorites'}
+                        title={favoriteClientIds.has(client.id) ? 'Remove from favorites' : 'Add to favorites'}
+                      >
+                        <Star className={`h-5 w-5 ${favoriteClientIds.has(client.id) ? 'fill-yellow-500' : ''}`} />
+                      </button>
+                      <button className="icon-btn" aria-label="Client actions">
+                        <MoreHorizontal className="h-5 w-5" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

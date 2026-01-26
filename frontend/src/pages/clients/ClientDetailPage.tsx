@@ -224,6 +224,46 @@ export function ClientDetailPage() {
   const { currentWorkspace, currentRole } = useWorkspace()
   const canEdit = currentRole !== 'viewer'
 
+  // Favorites functionality (per-user, stored in localStorage)
+  const [isFavorite, setIsFavorite] = useState(false)
+
+  // Load favorite status on mount
+  useEffect(() => {
+    if (!id) return
+    const savedFavorites = localStorage.getItem('favoriteClientIds')
+    if (savedFavorites) {
+      try {
+        const favIds = JSON.parse(savedFavorites) as string[]
+        setIsFavorite(favIds.includes(id))
+      } catch {
+        console.error('Failed to load favorite clients')
+      }
+    }
+  }, [id])
+
+  // Toggle favorite status
+  function toggleFavorite() {
+    if (!id) return
+    const savedFavorites = localStorage.getItem('favoriteClientIds')
+    let favIds: string[] = []
+    if (savedFavorites) {
+      try {
+        favIds = JSON.parse(savedFavorites) as string[]
+      } catch {
+        favIds = []
+      }
+    }
+    if (isFavorite) {
+      // Remove from favorites
+      favIds = favIds.filter(fid => fid !== id)
+    } else {
+      // Add to favorites
+      favIds.push(id)
+    }
+    localStorage.setItem('favoriteClientIds', JSON.stringify(favIds))
+    setIsFavorite(!isFavorite)
+  }
+
   useEffect(() => {
     if (id) {
       fetchClient()
@@ -587,9 +627,22 @@ export function ClientDetailPage() {
             {client.name[0].toUpperCase()}
           </div>
           <div className="min-w-0">
-            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white truncate">
-              {client.name}
-            </h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white truncate">
+                {client.name}
+              </h1>
+              <button
+                onClick={toggleFavorite}
+                className={`flex-shrink-0 p-1.5 rounded-full transition-colors ${
+                  isFavorite
+                    ? 'text-yellow-500 hover:bg-yellow-100 dark:hover:bg-yellow-900/30'
+                    : 'text-slate-400 hover:text-yellow-500 hover:bg-slate-100 dark:hover:bg-slate-700'
+                }`}
+                title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+              >
+                <Star className={`h-5 w-5 ${isFavorite ? 'fill-yellow-500' : ''}`} />
+              </button>
+            </div>
             {client.company && (
               <p className="text-slate-500 dark:text-slate-400 truncate">{client.company}</p>
             )}
