@@ -24,6 +24,70 @@ function generateUploadId(): string {
   return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
 }
 
+// Blocked file extensions for security
+const BLOCKED_EXTENSIONS = [
+  // Executables
+  '.exe', '.msi', '.dll', '.bat', '.cmd', '.com', '.scr', '.pif',
+  // Scripts
+  '.js', '.vbs', '.vbe', '.jse', '.ws', '.wsf', '.wsc', '.wsh',
+  '.ps1', '.ps1xml', '.ps2', '.ps2xml', '.psc1', '.psc2',
+  '.msh', '.msh1', '.msh2', '.mshxml', '.msh1xml', '.msh2xml',
+  // Server-side scripts
+  '.php', '.php3', '.php4', '.php5', '.phtml', '.asp', '.aspx', '.cgi', '.pl', '.py', '.rb',
+  // Java/Flash
+  '.jar', '.class', '.swf',
+  // Shortcuts and links
+  '.lnk', '.url', '.scf',
+  // Registry
+  '.reg',
+  // Shell
+  '.sh', '.bash', '.zsh', '.csh', '.tcsh', '.ksh',
+  // Macros and documents that can contain macros
+  '.docm', '.xlsm', '.pptm', '.dotm', '.xltm', '.potm',
+  // Other dangerous
+  '.hta', '.inf', '.msp', '.msc', '.gadget', '.application',
+]
+
+// Maximum file size (50MB)
+const MAX_FILE_SIZE = 50 * 1024 * 1024
+
+// Validate file before upload
+function validateFile(file: File): { valid: boolean; error?: string } {
+  // Check file extension
+  const fileName = file.name.toLowerCase()
+  const extension = '.' + fileName.split('.').pop()
+
+  if (BLOCKED_EXTENSIONS.includes(extension)) {
+    return {
+      valid: false,
+      error: `File type "${extension}" is not allowed for security reasons`,
+    }
+  }
+
+  // Check file size
+  if (file.size > MAX_FILE_SIZE) {
+    return {
+      valid: false,
+      error: `File size exceeds maximum limit of 50MB`,
+    }
+  }
+
+  // Check for double extensions (e.g., file.pdf.exe)
+  const parts = fileName.split('.')
+  if (parts.length > 2) {
+    for (const part of parts.slice(0, -1)) {
+      if (BLOCKED_EXTENSIONS.includes('.' + part)) {
+        return {
+          valid: false,
+          error: `Suspicious file name with multiple extensions`,
+        }
+      }
+    }
+  }
+
+  return { valid: true }
+}
+
 export function FileUpload({ clientId, workspaceId, projectId, onUploadComplete }: FileUploadProps) {
   const { user } = useAuth()
   const toast = useToast()
@@ -125,10 +189,35 @@ export function FileUpload({ clientId, workspaceId, projectId, onUploadComplete 
       return
     }
 
+    // Validate all files first
+    const validFiles: File[] = []
+    const invalidFiles: { file: File; error: string }[] = []
+
+    for (const file of files) {
+      const validation = validateFile(file)
+      if (validation.valid) {
+        validFiles.push(file)
+      } else {
+        invalidFiles.push({ file, error: validation.error || 'Invalid file' })
+      }
+    }
+
+    // Show errors for invalid files
+    if (invalidFiles.length > 0) {
+      for (const { file, error } of invalidFiles) {
+        toast.error(`"${file.name}": ${error}`)
+      }
+    }
+
+    // If no valid files, return early
+    if (validFiles.length === 0) {
+      return
+    }
+
     setUploading(true)
 
     // Create upload entries with unique IDs
-    const newUploadingFiles: UploadingFile[] = files.map(file => ({
+    const newUploadingFiles: UploadingFile[] = validFiles.map(file => ({
       file,
       progress: 0,
       status: 'uploading' as const,
@@ -142,10 +231,10 @@ export function FileUpload({ clientId, workspaceId, projectId, onUploadComplete 
     })
 
     let successCount = 0
-    let errorCount = 0
+    let errorCount = invalidFiles.length // Count invalid files as errors
 
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i]
+    for (let i = 0; i < validFiles.length; i++) {
+      const file = validFiles[i]
       const uploadId = newUploadingFiles[i].id
 
       try {
