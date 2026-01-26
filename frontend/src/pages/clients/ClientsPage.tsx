@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Search, Filter, MoreHorizontal, Building2, Mail, Phone, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Plus, Search, Filter, MoreHorizontal, Building2, Mail, Phone, ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import { AddClientModal } from '../../components/clients/AddClientModal'
-import type { Client } from '../../types/database'
+import type { Client, ClientStatus } from '../../types/database'
 
 const ITEMS_PER_PAGE = 20
 
@@ -16,28 +16,37 @@ export function ClientsPage() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
   const [totalCount, setTotalCount] = useState(0)
+  const [statusFilter, setStatusFilter] = useState<ClientStatus | null>(null)
+  const [showFilters, setShowFilters] = useState(false)
 
   useEffect(() => {
     if (currentWorkspace) {
       fetchClients()
     }
-  }, [currentWorkspace, currentPage])
+  }, [currentWorkspace, currentPage, statusFilter])
 
-  // Reset to page 1 when search query changes
+  // Reset to page 1 when search query or filters change
   useEffect(() => {
     setCurrentPage(1)
-  }, [searchQuery])
+  }, [searchQuery, statusFilter])
 
   async function fetchClients() {
     if (!currentWorkspace) return
 
     setLoading(true)
 
-    // First get the total count
-    const { count, error: countError } = await supabase
+    // Build the base query for count
+    let countQuery = supabase
       .from('clients')
       .select('*', { count: 'exact', head: true })
       .eq('workspace_id', currentWorkspace.id)
+
+    // Apply status filter to count query
+    if (statusFilter) {
+      countQuery = countQuery.eq('status', statusFilter)
+    }
+
+    const { count, error: countError } = await countQuery
 
     if (countError) {
       console.error('Error fetching client count:', countError)
@@ -45,14 +54,21 @@ export function ClientsPage() {
       setTotalCount(count || 0)
     }
 
-    // Then fetch the paginated data
+    // Build the base query for data
     const from = (currentPage - 1) * ITEMS_PER_PAGE
     const to = from + ITEMS_PER_PAGE - 1
 
-    const { data, error } = await supabase
+    let dataQuery = supabase
       .from('clients')
       .select('*')
       .eq('workspace_id', currentWorkspace.id)
+
+    // Apply status filter to data query
+    if (statusFilter) {
+      dataQuery = dataQuery.eq('status', statusFilter)
+    }
+
+    const { data, error } = await dataQuery
       .order('created_at', { ascending: false })
       .range(from, to)
 
@@ -132,11 +148,81 @@ export function ClientsPage() {
             className="input pl-10"
           />
         </div>
-        <button className="btn-outline">
-          <Filter className="h-5 w-5 mr-2" />
-          Filters
-        </button>
+        <div className="relative">
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className={`btn-outline ${statusFilter ? 'border-primary-500 text-primary-600' : ''}`}
+          >
+            <Filter className="h-5 w-5 mr-2" />
+            Filters
+            {statusFilter && (
+              <span className="ml-2 px-1.5 py-0.5 text-xs bg-primary-100 dark:bg-primary-900/30 rounded">1</span>
+            )}
+          </button>
+          {showFilters && (
+            <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 z-10">
+              <div className="p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-medium text-slate-900 dark:text-white">Filters</h3>
+                  {statusFilter && (
+                    <button
+                      onClick={() => {
+                        setStatusFilter(null)
+                        setShowFilters(false)
+                      }}
+                      className="text-xs text-primary-600 hover:text-primary-700"
+                    >
+                      Clear all
+                    </button>
+                  )}
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-2 block">Status</label>
+                  <div className="space-y-1">
+                    {(['lead', 'active', 'inactive', 'churned'] as ClientStatus[]).map((status) => (
+                      <button
+                        key={status}
+                        onClick={() => {
+                          setStatusFilter(statusFilter === status ? null : status)
+                          setShowFilters(false)
+                        }}
+                        className={`w-full px-3 py-2 text-left text-sm rounded-lg capitalize transition-colors ${
+                          statusFilter === status
+                            ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300'
+                            : 'hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'
+                        }`}
+                      >
+                        <span className={`inline-block w-2 h-2 rounded-full mr-2 ${
+                          status === 'lead' ? 'bg-yellow-500' :
+                          status === 'active' ? 'bg-green-500' :
+                          status === 'inactive' ? 'bg-slate-400' : 'bg-red-500'
+                        }`} />
+                        {status}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
+
+      {/* Active Filters */}
+      {statusFilter && (
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-slate-500 dark:text-slate-400">Filtered by:</span>
+          <span className="inline-flex items-center gap-1 px-2 py-1 bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 rounded-full text-sm capitalize">
+            {statusFilter}
+            <button
+              onClick={() => setStatusFilter(null)}
+              className="hover:text-primary-900 dark:hover:text-primary-100"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </span>
+        </div>
+      )}
 
       {/* Client List */}
       {loading ? (
