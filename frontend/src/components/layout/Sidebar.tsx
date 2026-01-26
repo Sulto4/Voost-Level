@@ -14,6 +14,7 @@ import {
   Building2,
   PanelLeftClose,
   PanelLeftOpen,
+  BarChart3,
 } from 'lucide-react'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import { useAuth } from '../../context/AuthContext'
@@ -26,6 +27,7 @@ const navigation = [
   { name: 'Clients', href: '/clients', icon: Users, minRole: 'viewer' as const },
   { name: 'Pipeline', href: '/pipeline', icon: Kanban, minRole: 'viewer' as const },
   { name: 'Projects', href: '/projects', icon: FolderKanban, minRole: 'viewer' as const },
+  { name: 'Reports', href: '/reports', icon: BarChart3, minRole: 'viewer' as const },
   { name: 'Team', href: '/team', icon: UserCog, minRole: 'member' as const },
   { name: 'Settings', href: '/settings', icon: Settings, minRole: 'viewer' as const },
 ]
