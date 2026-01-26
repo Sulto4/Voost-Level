@@ -4,6 +4,7 @@ import { Plus, Search, Filter, MoreHorizontal, Building2, Mail, Phone, ChevronLe
 import { supabase } from '../../lib/supabase'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import { AddClientModal } from '../../components/clients/AddClientModal'
+import { ClientTableSkeleton } from '../../components/ui/Skeleton'
 import type { Client, ClientStatus } from '../../types/database'
 
 const ITEMS_PER_PAGE = 20
@@ -228,10 +229,7 @@ export function ClientsPage() {
 
       {/* Client List */}
       {loading ? (
-        <div className="card p-12 text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
-          <p className="mt-4 text-slate-500 dark:text-slate-400">Loading clients...</p>
-        </div>
+        <ClientTableSkeleton rows={5} />
       ) : filteredClients.length === 0 ? (
         <div className="card p-12 text-center">
           <div className="mx-auto w-12 h-12 bg-slate-100 dark:bg-slate-700 rounded-full flex items-center justify-center mb-4">

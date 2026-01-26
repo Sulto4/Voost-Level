@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Users, FolderKanban, DollarSign, TrendingUp } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useWorkspace } from '../context/WorkspaceContext'
+import { StatCardSkeleton, CardSkeleton } from '../components/ui/Skeleton'
 
 export function DashboardPage() {
   const { currentWorkspace } = useWorkspace()
@@ -79,9 +80,27 @@ export function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="text-center py-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
-        <p className="mt-4 text-slate-500 dark:text-slate-400">Loading dashboard...</p>
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
+            Dashboard
+          </h1>
+          <p className="text-slate-500 dark:text-slate-400">
+            Welcome to Voost Level. Here's an overview of your workspace.
+          </p>
+        </div>
+        {/* Stats Grid Skeleton */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <StatCardSkeleton />
+          <StatCardSkeleton />
+          <StatCardSkeleton />
+          <StatCardSkeleton />
+        </div>
+        {/* Activity Cards Skeleton */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <CardSkeleton />
+          <CardSkeleton />
+        </div>
       </div>
     )
   }
