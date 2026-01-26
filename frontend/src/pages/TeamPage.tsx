@@ -208,30 +208,30 @@ export function TeamPage() {
 
       {/* Role Descriptions */}
       <div className="card p-6">
-        <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">
+        <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">
           Role Permissions
-        </h3>
+        </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
-            <h4 className="font-medium text-slate-900 dark:text-white mb-2">Owner</h4>
+            <h3 className="font-medium text-slate-900 dark:text-white mb-2">Owner</h3>
             <p className="text-sm text-slate-500 dark:text-slate-400">
               Full access. Can delete workspace and manage billing.
             </p>
           </div>
           <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
-            <h4 className="font-medium text-slate-900 dark:text-white mb-2">Admin</h4>
+            <h3 className="font-medium text-slate-900 dark:text-white mb-2">Admin</h3>
             <p className="text-sm text-slate-500 dark:text-slate-400">
               Can manage team, clients, and projects.
             </p>
           </div>
           <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
-            <h4 className="font-medium text-slate-900 dark:text-white mb-2">Member</h4>
+            <h3 className="font-medium text-slate-900 dark:text-white mb-2">Member</h3>
             <p className="text-sm text-slate-500 dark:text-slate-400">
               Can create and edit clients and projects.
             </p>
           </div>
           <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
-            <h4 className="font-medium text-slate-900 dark:text-white mb-2">Viewer</h4>
+            <h3 className="font-medium text-slate-900 dark:text-white mb-2">Viewer</h3>
             <p className="text-sm text-slate-500 dark:text-slate-400">
               Read-only access to all data.
             </p>

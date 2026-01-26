@@ -185,9 +185,9 @@ export function ClientDetailPage() {
           <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">
+                <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">
                   Contact Information
-                </h3>
+                </h2>
                 <div className="space-y-3">
                   {client.email && (
                     <div className="flex items-center text-slate-600 dark:text-slate-300 min-h-[44px]">
@@ -232,9 +232,9 @@ export function ClientDetailPage() {
                 </div>
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">
+                <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">
                   Details
-                </h3>
+                </h2>
                 <dl className="space-y-3">
                   <div>
                     <dt className="text-sm text-slate-500 dark:text-slate-400">Status</dt>
@@ -273,9 +273,9 @@ export function ClientDetailPage() {
             {/* Notes Section */}
             {client.notes && (
               <div>
-                <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">
+                <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">
                   Notes
-                </h3>
+                </h2>
                 <div className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-4">
                   <p className="text-slate-600 dark:text-slate-300 whitespace-pre-wrap">
                     {client.notes}
@@ -288,9 +288,9 @@ export function ClientDetailPage() {
         {activeTab === 'Projects' && (
           <div>
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
                 Projects ({projects.length})
-              </h3>
+              </h2>
               <button
                 onClick={() => setIsAddProjectModalOpen(true)}
                 className="btn-primary"
