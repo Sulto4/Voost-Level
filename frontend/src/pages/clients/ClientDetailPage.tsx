@@ -1,21 +1,32 @@
 import { useState, useEffect } from 'react'
-import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, Edit, Trash2, Mail, Phone, Globe, Building2 } from 'lucide-react'
+import { useParams, Link, useNavigate } from 'react-router-dom'
+import { ArrowLeft, Edit, Trash2, Mail, Phone, Globe, Building2, Plus, Calendar, DollarSign } from 'lucide-react'
 import { clsx } from 'clsx'
 import { supabase } from '../../lib/supabase'
-import type { Client } from '../../types/database'
+import { EditClientModal } from '../../components/clients/EditClientModal'
+import { AddProjectModal } from '../../components/projects/AddProjectModal'
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
+import type { Client, Project } from '../../types/database'
 
 const tabs = ['Overview', 'Projects', 'Activity', 'Files']
 
 export function ClientDetailPage() {
   const { id } = useParams()
+  const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState('Overview')
   const [client, setClient] = useState<Client | null>(null)
   const [loading, setLoading] = useState(true)
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false)
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [isAddProjectModalOpen, setIsAddProjectModalOpen] = useState(false)
+  const [projects, setProjects] = useState<Project[]>([])
+  const [projectsLoading, setProjectsLoading] = useState(false)
 
   useEffect(() => {
     if (id) {
       fetchClient()
+      fetchProjects()
     }
   }, [id])
 
@@ -34,6 +45,41 @@ export function ClientDetailPage() {
       setClient(data)
     }
     setLoading(false)
+  }
+
+  async function fetchProjects() {
+    if (!id) return
+    setProjectsLoading(true)
+    const { data, error } = await supabase
+      .from('projects')
+      .select('*')
+      .eq('client_id', id)
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      console.error('Error fetching projects:', error)
+    } else {
+      setProjects(data || [])
+    }
+    setProjectsLoading(false)
+  }
+
+  async function handleDelete() {
+    if (!client) return
+
+    setDeleting(true)
+    const { error } = await supabase
+      .from('clients')
+      .delete()
+      .eq('id', client.id)
+
+    if (error) {
+      console.error('Error deleting client:', error)
+      setDeleting(false)
+    } else {
+      // Navigate back to clients list
+      navigate('/clients')
+    }
   }
 
   const statusColors: Record<string, string> = {
@@ -95,11 +141,17 @@ export function ClientDetailPage() {
           </div>
         </div>
         <div className="flex items-center space-x-2">
-          <button className="btn-outline">
+          <button
+            onClick={() => setIsEditModalOpen(true)}
+            className="btn-outline"
+          >
             <Edit className="h-4 w-4 mr-2" />
             Edit
           </button>
-          <button className="btn-outline text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20">
+          <button
+            onClick={() => setIsDeleteDialogOpen(true)}
+            className="btn-outline text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+          >
             <Trash2 className="h-4 w-4 mr-2" />
             Delete
           </button>
@@ -233,9 +285,75 @@ export function ClientDetailPage() {
           </div>
         )}
         {activeTab === 'Projects' && (
-          <div className="text-center py-8 text-slate-500 dark:text-slate-400">
-            <p>No projects yet</p>
-            <button className="btn-primary mt-4">Add Project</button>
+          <div>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
+                Projects ({projects.length})
+              </h3>
+              <button
+                onClick={() => setIsAddProjectModalOpen(true)}
+                className="btn-primary"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Add Project
+              </button>
+            </div>
+            {projectsLoading ? (
+              <div className="text-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+                <p className="mt-4 text-slate-500 dark:text-slate-400">Loading projects...</p>
+              </div>
+            ) : projects.length === 0 ? (
+              <div className="text-center py-8 text-slate-500 dark:text-slate-400">
+                <p>No projects yet</p>
+                <p className="text-sm mt-2">Create your first project to track work for this client.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {projects.map((project) => (
+                  <div
+                    key={project.id}
+                    className="p-4 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <h4 className="font-medium text-slate-900 dark:text-white">
+                          {project.name}
+                        </h4>
+                        {project.description && (
+                          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                            {project.description}
+                          </p>
+                        )}
+                        <div className="flex items-center gap-4 mt-2">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium capitalize ${
+                            project.status === 'completed' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' :
+                            project.status === 'in_progress' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300' :
+                            project.status === 'review' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300' :
+                            project.status === 'cancelled' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300' :
+                            'bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-300'
+                          }`}>
+                            {project.status.replace('_', ' ')}
+                          </span>
+                          {project.due_date && (
+                            <span className="text-xs text-slate-500 dark:text-slate-400 flex items-center">
+                              <Calendar className="h-3 w-3 mr-1" />
+                              Due {new Date(project.due_date).toLocaleDateString()}
+                            </span>
+                          )}
+                          {project.budget && (
+                            <span className="text-xs text-slate-500 dark:text-slate-400 flex items-center">
+                              <DollarSign className="h-3 w-3 mr-1" />
+                              ${project.budget.toLocaleString()}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
         {activeTab === 'Activity' && (
@@ -251,6 +369,34 @@ export function ClientDetailPage() {
           </div>
         )}
       </div>
+
+      {/* Edit Client Modal */}
+      <EditClientModal
+        isOpen={isEditModalOpen}
+        onClose={() => setIsEditModalOpen(false)}
+        client={client}
+        onClientUpdated={fetchClient}
+      />
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={isDeleteDialogOpen}
+        onClose={() => setIsDeleteDialogOpen(false)}
+        onConfirm={handleDelete}
+        title="Delete Client"
+        message={`Are you sure you want to delete "${client.name}"? This action cannot be undone.`}
+        confirmText="Delete"
+        variant="danger"
+        loading={deleting}
+      />
+
+      {/* Add Project Modal */}
+      <AddProjectModal
+        isOpen={isAddProjectModalOpen}
+        onClose={() => setIsAddProjectModalOpen(false)}
+        client={client}
+        onProjectAdded={fetchProjects}
+      />
     </div>
   )
 }

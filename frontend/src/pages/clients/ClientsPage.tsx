@@ -42,7 +42,8 @@ export function ClientsPage() {
     return (
       client.name.toLowerCase().includes(query) ||
       client.company?.toLowerCase().includes(query) ||
-      client.email?.toLowerCase().includes(query)
+      client.email?.toLowerCase().includes(query) ||
+      client.source?.toLowerCase().includes(query)
     )
   })
 
