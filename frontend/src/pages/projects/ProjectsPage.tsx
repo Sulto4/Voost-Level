@@ -218,7 +218,7 @@ export function ProjectsPage() {
                     )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right">
-                    <button className="icon-btn">
+                    <button className="icon-btn" aria-label="Project actions">
                       <MoreHorizontal className="h-5 w-5" />
                     </button>
                   </td>

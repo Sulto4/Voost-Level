@@ -42,6 +42,7 @@ export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalPr
                 <button
                   onClick={onClose}
                   className="icon-btn"
+                  aria-label="Close modal"
                 >
                   <X className="h-5 w-5" />
                 </button>

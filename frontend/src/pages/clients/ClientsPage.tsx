@@ -217,6 +217,7 @@ export function ClientsPage() {
             <button
               onClick={() => setStatusFilter(null)}
               className="hover:text-primary-900 dark:hover:text-primary-100"
+              aria-label="Clear filter"
             >
               <X className="h-3 w-3" />
             </button>
@@ -328,7 +329,7 @@ export function ClientsPage() {
                     {client.source || '-'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right">
-                    <button className="icon-btn">
+                    <button className="icon-btn" aria-label="Client actions">
                       <MoreHorizontal className="h-5 w-5" />
                     </button>
                   </td>

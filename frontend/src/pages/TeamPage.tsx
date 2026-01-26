@@ -171,6 +171,7 @@ export function TeamPage() {
                       onClick={() => cancelInvitation(invitation.id)}
                       className="p-2 text-red-400 hover:text-red-600 dark:hover:text-red-300"
                       title="Cancel invitation"
+                      aria-label="Cancel invitation"
                     >
                       <X className="h-5 w-5" />
                     </button>
