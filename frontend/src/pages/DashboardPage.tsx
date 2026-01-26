@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { Users, FolderKanban, DollarSign, TrendingUp, MessageSquare, Phone, Mail, Calendar, CheckSquare, ArrowRightLeft } from 'lucide-react'
+import { Users, FolderKanban, DollarSign, TrendingUp, MessageSquare, Phone, Mail, Calendar, CheckSquare, ArrowRightLeft, ChevronDown } from 'lucide-react'
+import { clsx } from 'clsx'
 import { supabase } from '../lib/supabase'
 import { useWorkspace } from '../context/WorkspaceContext'
 import { StatCardSkeleton, CardSkeleton } from '../components/ui/Skeleton'
 import type { Activity, Client, Profile } from '../types/database'
+
+type DateRange = '7d' | '30d' | '90d' | 'year' | 'all'
 
 interface ActivityWithDetails extends Activity {
   client?: Client | null
@@ -14,6 +17,8 @@ interface ActivityWithDetails extends Activity {
 export function DashboardPage() {
   const { currentWorkspace } = useWorkspace()
   const [loading, setLoading] = useState(true)
+  const [dateRange, setDateRange] = useState<DateRange>('30d')
+  const [isDateRangeDropdownOpen, setIsDateRangeDropdownOpen] = useState(false)
   const [stats, setStats] = useState({
     totalClients: 0,
     activeProjects: 0,
@@ -22,22 +27,56 @@ export function DashboardPage() {
   })
   const [recentActivities, setRecentActivities] = useState<ActivityWithDetails[]>([])
 
+  const dateRangeOptions: { value: DateRange; label: string }[] = [
+    { value: '7d', label: 'Last 7 days' },
+    { value: '30d', label: 'Last 30 days' },
+    { value: '90d', label: 'Last 90 days' },
+    { value: 'year', label: 'This Year' },
+    { value: 'all', label: 'All Time' },
+  ]
+
+  const selectedDateRange = dateRangeOptions.find(d => d.value === dateRange)!
+
+  // Calculate date filter based on selected range
+  function getDateFilter(): Date | null {
+    const now = new Date()
+    switch (dateRange) {
+      case '7d':
+        return new Date(now.setDate(now.getDate() - 7))
+      case '30d':
+        return new Date(now.setDate(now.getDate() - 30))
+      case '90d':
+        return new Date(now.setDate(now.getDate() - 90))
+      case 'year':
+        return new Date(now.getFullYear(), 0, 1) // Jan 1 of current year
+      case 'all':
+        return null // No date filter
+    }
+  }
+
   useEffect(() => {
     if (currentWorkspace) {
       fetchDashboardStats()
     }
-  }, [currentWorkspace])
+  }, [currentWorkspace, dateRange])
 
   async function fetchDashboardStats() {
     if (!currentWorkspace) return
 
     setLoading(true)
+    const dateFilter = getDateFilter()
 
-    // Fetch all clients for this workspace
-    const { data: clientsData, error: clientsError } = await supabase
+    // Fetch all clients for this workspace (optionally filtered by creation date)
+    let clientsQuery = supabase
       .from('clients')
-      .select('id, status, value')
+      .select('id, status, value, created_at')
       .eq('workspace_id', currentWorkspace.id)
+
+    if (dateFilter) {
+      clientsQuery = clientsQuery.gte('created_at', dateFilter.toISOString())
+    }
+
+    const { data: clientsData, error: clientsError } = await clientsQuery
 
     if (clientsError) {
       console.error('Error fetching clients:', clientsError)
@@ -53,11 +92,17 @@ export function DashboardPage() {
       ? Math.round((activeClients / totalClients) * 100)
       : 0
 
-    // Fetch projects
-    const { data: projectsData, error: projectsError } = await supabase
+    // Fetch projects (optionally filtered by creation date)
+    let projectsQuery = supabase
       .from('projects')
-      .select('id, status, clients!inner(workspace_id)')
+      .select('id, status, created_at, clients!inner(workspace_id)')
       .eq('clients.workspace_id', currentWorkspace.id)
+
+    if (dateFilter) {
+      projectsQuery = projectsQuery.gte('created_at', dateFilter.toISOString())
+    }
+
+    const { data: projectsData, error: projectsError } = await projectsQuery
 
     if (projectsError) {
       console.error('Error fetching projects:', projectsError)
@@ -75,15 +120,28 @@ export function DashboardPage() {
       winRate,
     })
 
-    // Fetch recent activities for clients in this workspace
-    if (clients.length > 0) {
-      const clientIds = clients.map(c => c.id)
-      const { data: activitiesData, error: activitiesError } = await supabase
+    // Fetch all clients (for activity fetching - need all client IDs)
+    const { data: allClientsData } = await supabase
+      .from('clients')
+      .select('id')
+      .eq('workspace_id', currentWorkspace.id)
+
+    const allClientIds = allClientsData?.map(c => c.id) || []
+
+    // Fetch recent activities for clients in this workspace (filtered by date)
+    if (allClientIds.length > 0) {
+      let activitiesQuery = supabase
         .from('activities')
         .select('*')
-        .in('client_id', clientIds)
+        .in('client_id', allClientIds)
         .order('created_at', { ascending: false })
         .limit(10)
+
+      if (dateFilter) {
+        activitiesQuery = activitiesQuery.gte('created_at', dateFilter.toISOString())
+      }
+
+      const { data: activitiesData, error: activitiesError } = await activitiesQuery
 
       if (activitiesError) {
         console.error('Error fetching activities:', activitiesError)
@@ -225,13 +283,52 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-          Dashboard
-        </h1>
-        <p className="text-slate-500 dark:text-slate-400">
-          Welcome to Voost Level. Here's an overview of your workspace.
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
+            Dashboard
+          </h1>
+          <p className="text-slate-500 dark:text-slate-400">
+            Welcome to Voost Level. Here's an overview of your workspace.
+          </p>
+        </div>
+
+        {/* Date Range Selector */}
+        <div className="relative">
+          <button
+            onClick={() => setIsDateRangeDropdownOpen(!isDateRangeDropdownOpen)}
+            className="btn-outline flex items-center gap-2"
+          >
+            <Calendar className="h-4 w-4" />
+            {selectedDateRange.label}
+            <ChevronDown className={clsx(
+              'h-4 w-4 transition-transform',
+              isDateRangeDropdownOpen && 'rotate-180'
+            )} />
+          </button>
+
+          {isDateRangeDropdownOpen && (
+            <div className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg z-50">
+              {dateRangeOptions.map(option => (
+                <button
+                  key={option.value}
+                  onClick={() => {
+                    setDateRange(option.value)
+                    setIsDateRangeDropdownOpen(false)
+                  }}
+                  className={clsx(
+                    'w-full text-left px-4 py-2.5 text-sm transition-colors first:rounded-t-lg last:rounded-b-lg',
+                    dateRange === option.value
+                      ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300'
+                      : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
+                  )}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Stats Grid */}
