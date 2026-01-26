@@ -27,6 +27,16 @@ export function RegisterPage() {
       return
     }
 
+    // Check password complexity
+    const hasUppercase = /[A-Z]/.test(password)
+    const hasLowercase = /[a-z]/.test(password)
+    const hasNumber = /[0-9]/.test(password)
+
+    if (!hasUppercase || !hasLowercase || !hasNumber) {
+      setError('Password must include uppercase, lowercase, and a number')
+      return
+    }
+
     setLoading(true)
     const { error } = await signUp(email, password, fullName)
 
