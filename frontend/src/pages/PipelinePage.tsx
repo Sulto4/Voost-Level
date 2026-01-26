@@ -335,8 +335,8 @@ export function PipelinePage() {
                 </span>
               </div>
               <span className="text-sm font-medium text-slate-500 dark:text-slate-400 flex items-center">
-                <DollarSign className="h-3 w-3" />
-                {calculateStageValue(stage.clients).toLocaleString()}
+                <DollarSign className="h-3 w-3 mr-0.5" />
+                ${calculateStageValue(stage.clients).toLocaleString()}
               </span>
             </div>
 
@@ -368,8 +368,8 @@ export function PipelinePage() {
                       )}
                       {client.value && (
                         <p className="text-sm font-medium text-primary-600 dark:text-primary-400 mt-2 flex items-center">
-                          <DollarSign className="h-3 w-3" />
-                          {client.value.toLocaleString()}
+                          <DollarSign className="h-3 w-3 mr-0.5" />
+                          ${client.value.toLocaleString()}
                         </p>
                       )}
                     </Link>
