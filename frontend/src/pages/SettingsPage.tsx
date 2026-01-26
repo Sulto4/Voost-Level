@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
-import { User, Building2, Palette, Bell, Shield, Webhook, Plus, Trash2, Check, X } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { User, Building2, Palette, Bell, Shield, Webhook, Plus, Trash2, Check, X, AlertTriangle, UserCog } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 import { useWorkspace } from '../context/WorkspaceContext'
 import { supabase } from '../lib/supabase'
-import type { Webhook as WebhookType } from '../types/database'
+import type { Webhook as WebhookType, WorkspaceMember } from '../types/database'
 
 const tabs = [
   { name: 'Profile', icon: User },
@@ -28,10 +29,11 @@ const webhookEvents = [
 ]
 
 export function SettingsPage() {
+  const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState('Profile')
-  const { profile, updateProfile } = useAuth()
+  const { profile, updateProfile, user } = useAuth()
   const { theme, setTheme } = useTheme()
-  const { currentWorkspace, currentRole, updateWorkspace } = useWorkspace()
+  const { currentWorkspace, currentRole, updateWorkspace, deleteWorkspace, refreshWorkspaces } = useWorkspace()
 
   const [fullName, setFullName] = useState(profile?.full_name || '')
   const [saving, setSaving] = useState(false)
@@ -52,6 +54,17 @@ export function SettingsPage() {
   const [newWebhookSecret, setNewWebhookSecret] = useState('')
   const [newWebhookEvents, setNewWebhookEvents] = useState<string[]>([])
   const [webhookSaving, setWebhookSaving] = useState(false)
+
+  // Danger zone state
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [deleteConfirmText, setDeleteConfirmText] = useState('')
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
+  const [showTransferModal, setShowTransferModal] = useState(false)
+  const [workspaceMembers, setWorkspaceMembers] = useState<(WorkspaceMember & { email?: string; full_name?: string })[]>([])
+  const [selectedNewOwner, setSelectedNewOwner] = useState('')
+  const [transferring, setTransferring] = useState(false)
+  const [transferError, setTransferError] = useState('')
 
   // Update workspace form when currentWorkspace changes
   useEffect(() => {
@@ -120,6 +133,89 @@ export function SettingsPage() {
     setNewWebhookEvents(prev =>
       prev.includes(event) ? prev.filter(e => e !== event) : [...prev, event]
     )
+  }
+
+  async function fetchWorkspaceMembers() {
+    if (!currentWorkspace || !user) return
+    const { data } = await supabase
+      .from('workspace_members')
+      .select(`
+        *,
+        user:users!workspace_members_user_id_fkey(email, full_name)
+      `)
+      .eq('workspace_id', currentWorkspace.id)
+      .neq('user_id', user.id) // Exclude current user
+
+    if (data) {
+      setWorkspaceMembers(data.map(m => ({
+        ...m,
+        email: (m.user as { email?: string })?.email,
+        full_name: (m.user as { full_name?: string })?.full_name,
+      })))
+    }
+  }
+
+  async function handleDeleteWorkspace() {
+    if (!currentWorkspace || deleteConfirmText !== currentWorkspace.name) return
+
+    setDeleting(true)
+    setDeleteError('')
+
+    const { error } = await deleteWorkspace(currentWorkspace.id)
+
+    if (error) {
+      setDeleteError(error.message || 'Failed to delete workspace')
+      setDeleting(false)
+    } else {
+      // Workspace deleted, redirect to onboarding if no workspaces left
+      setShowDeleteModal(false)
+      await refreshWorkspaces()
+      navigate('/onboarding')
+    }
+  }
+
+  async function handleTransferOwnership() {
+    if (!currentWorkspace || !selectedNewOwner || !user) return
+
+    setTransferring(true)
+    setTransferError('')
+
+    // Update new owner's role to owner
+    const { error: updateNewError } = await supabase
+      .from('workspace_members')
+      .update({ role: 'owner' })
+      .eq('workspace_id', currentWorkspace.id)
+      .eq('user_id', selectedNewOwner)
+
+    if (updateNewError) {
+      setTransferError(updateNewError.message || 'Failed to transfer ownership')
+      setTransferring(false)
+      return
+    }
+
+    // Update current user's role to admin
+    const { error: updateCurrentError } = await supabase
+      .from('workspace_members')
+      .update({ role: 'admin' })
+      .eq('workspace_id', currentWorkspace.id)
+      .eq('user_id', user.id)
+
+    if (updateCurrentError) {
+      setTransferError(updateCurrentError.message || 'Failed to update your role')
+      setTransferring(false)
+      return
+    }
+
+    // Update workspace created_by
+    await supabase
+      .from('workspaces')
+      .update({ created_by: selectedNewOwner })
+      .eq('id', currentWorkspace.id)
+
+    setShowTransferModal(false)
+    setSelectedNewOwner('')
+    setTransferring(false)
+    await refreshWorkspaces()
   }
 
   async function handleProfileSave() {
@@ -280,6 +376,175 @@ export function SettingsPage() {
                   >
                     {workspaceSaving ? 'Saving...' : 'Save Changes'}
                   </button>
+                </div>
+              )}
+
+              {/* Danger Zone - Owner Only */}
+              {currentRole === 'owner' && (
+                <>
+                  <hr className="border-slate-200 dark:border-slate-700 mt-8" />
+                  <div className="mt-6">
+                    <h3 className="text-lg font-semibold text-red-600 dark:text-red-400 flex items-center gap-2">
+                      <AlertTriangle className="h-5 w-5" />
+                      Danger Zone
+                    </h3>
+                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 mb-4">
+                      These actions are irreversible. Please proceed with caution.
+                    </p>
+
+                    <div className="space-y-4">
+                      {/* Transfer Ownership */}
+                      <div className="p-4 border border-slate-200 dark:border-slate-700 rounded-lg">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h4 className="font-medium text-slate-900 dark:text-white">Transfer Ownership</h4>
+                            <p className="text-sm text-slate-500 dark:text-slate-400">
+                              Transfer this workspace to another team member
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => {
+                              fetchWorkspaceMembers()
+                              setShowTransferModal(true)
+                            }}
+                            className="btn-outline text-amber-600 border-amber-300 hover:bg-amber-50 dark:hover:bg-amber-900/20"
+                          >
+                            <UserCog className="h-4 w-4 mr-2" />
+                            Transfer
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Delete Workspace */}
+                      <div className="p-4 border border-red-200 dark:border-red-800 rounded-lg bg-red-50/50 dark:bg-red-900/10">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h4 className="font-medium text-slate-900 dark:text-white">Delete Workspace</h4>
+                            <p className="text-sm text-slate-500 dark:text-slate-400">
+                              Permanently delete this workspace and all its data
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => setShowDeleteModal(true)}
+                            className="btn-outline text-red-600 border-red-300 hover:bg-red-100 dark:hover:bg-red-900/20"
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Delete Workspace Modal */}
+              {showDeleteModal && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                  <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xl max-w-md w-full p-6">
+                    <div className="flex items-center gap-3 text-red-600 mb-4">
+                      <AlertTriangle className="h-6 w-6" />
+                      <h3 className="text-lg font-semibold">Delete Workspace</h3>
+                    </div>
+                    <p className="text-slate-600 dark:text-slate-300 mb-4">
+                      This action cannot be undone. This will permanently delete the workspace
+                      <strong className="text-slate-900 dark:text-white"> {currentWorkspace?.name}</strong> and all associated data including clients, projects, and activities.
+                    </p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400 mb-2">
+                      Please type <strong className="text-slate-900 dark:text-white">{currentWorkspace?.name}</strong> to confirm.
+                    </p>
+                    <input
+                      type="text"
+                      value={deleteConfirmText}
+                      onChange={(e) => setDeleteConfirmText(e.target.value)}
+                      placeholder="Type workspace name to confirm"
+                      className="input mb-4"
+                    />
+                    {deleteError && (
+                      <div className="p-3 mb-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-500 text-sm">
+                        {deleteError}
+                      </div>
+                    )}
+                    <div className="flex gap-3 justify-end">
+                      <button
+                        onClick={() => {
+                          setShowDeleteModal(false)
+                          setDeleteConfirmText('')
+                          setDeleteError('')
+                        }}
+                        className="btn-outline"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleDeleteWorkspace}
+                        disabled={deleting || deleteConfirmText !== currentWorkspace?.name}
+                        className="btn-primary bg-red-600 hover:bg-red-700 disabled:bg-red-300"
+                      >
+                        {deleting ? 'Deleting...' : 'Delete Workspace'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Transfer Ownership Modal */}
+              {showTransferModal && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                  <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xl max-w-md w-full p-6">
+                    <div className="flex items-center gap-3 text-amber-600 mb-4">
+                      <UserCog className="h-6 w-6" />
+                      <h3 className="text-lg font-semibold">Transfer Ownership</h3>
+                    </div>
+                    <p className="text-slate-600 dark:text-slate-300 mb-4">
+                      Transfer ownership of <strong className="text-slate-900 dark:text-white">{currentWorkspace?.name}</strong> to another team member. You will become an Admin after the transfer.
+                    </p>
+                    {workspaceMembers.length === 0 ? (
+                      <p className="text-slate-500 dark:text-slate-400 text-sm mb-4">
+                        No other team members to transfer ownership to. Invite team members first.
+                      </p>
+                    ) : (
+                      <div className="mb-4">
+                        <label className="label">Select New Owner</label>
+                        <select
+                          value={selectedNewOwner}
+                          onChange={(e) => setSelectedNewOwner(e.target.value)}
+                          className="input"
+                        >
+                          <option value="">Select a team member</option>
+                          {workspaceMembers.map((member) => (
+                            <option key={member.user_id} value={member.user_id}>
+                              {member.full_name || member.email} ({member.role})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                    {transferError && (
+                      <div className="p-3 mb-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-500 text-sm">
+                        {transferError}
+                      </div>
+                    )}
+                    <div className="flex gap-3 justify-end">
+                      <button
+                        onClick={() => {
+                          setShowTransferModal(false)
+                          setSelectedNewOwner('')
+                          setTransferError('')
+                        }}
+                        className="btn-outline"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleTransferOwnership}
+                        disabled={transferring || !selectedNewOwner}
+                        className="btn-primary bg-amber-600 hover:bg-amber-700 disabled:bg-amber-300"
+                      >
+                        {transferring ? 'Transferring...' : 'Transfer Ownership'}
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
