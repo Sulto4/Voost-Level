@@ -53,7 +53,7 @@ export function Sidebar() {
             <div className="relative" ref={dropdownRef}>
               <button
                 onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                className="w-full flex items-center justify-between px-3 py-2 text-left text-sm font-medium text-slate-900 dark:text-white bg-slate-100 dark:bg-slate-700 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+                className="w-full flex items-center justify-between px-3 py-2.5 min-h-[44px] text-left text-sm font-medium text-slate-900 dark:text-white bg-slate-100 dark:bg-slate-700 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
               >
                 <span className="truncate">
                   {currentWorkspace?.name || 'Select Workspace'}
@@ -78,7 +78,7 @@ export function Sidebar() {
                             setIsDropdownOpen(false)
                           }}
                           className={clsx(
-                            'w-full flex items-center px-3 py-2 text-sm text-left hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors',
+                            'w-full flex items-center px-3 py-2.5 min-h-[44px] text-sm text-left hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors',
                             workspace.id === currentWorkspace?.id
                               ? 'text-primary-600 dark:text-primary-400'
                               : 'text-slate-700 dark:text-slate-300'
@@ -106,7 +106,7 @@ export function Sidebar() {
                         setIsDropdownOpen(false)
                         setIsCreateModalOpen(true)
                       }}
-                      className="w-full flex items-center px-3 py-2 text-sm text-left text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                      className="w-full flex items-center px-3 py-2.5 min-h-[44px] text-sm text-left text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
                     >
                       <Plus className="h-4 w-4 mr-2" />
                       Create Workspace
@@ -125,7 +125,7 @@ export function Sidebar() {
                 to={item.href}
                 className={({ isActive }) =>
                   clsx(
-                    'flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors',
+                    'flex items-center px-3 py-2.5 min-h-[44px] text-sm font-medium rounded-lg transition-colors',
                     isActive
                       ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300'
                       : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'

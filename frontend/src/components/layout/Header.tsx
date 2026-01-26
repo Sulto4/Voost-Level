@@ -21,7 +21,7 @@ export function Header() {
     <header className="sticky top-0 z-40 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">
       <div className="flex items-center justify-between h-16 px-4 sm:px-6">
         {/* Mobile menu button */}
-        <button className="lg:hidden p-2 text-slate-500 hover:text-slate-600 dark:text-slate-400 dark:hover:text-slate-300">
+        <button className="lg:hidden icon-btn">
           <Menu className="h-6 w-6" />
         </button>
 
@@ -44,7 +44,7 @@ export function Header() {
           {/* Theme toggle */}
           <button
             onClick={toggleTheme}
-            className="p-2 text-slate-500 hover:text-slate-600 dark:text-slate-400 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+            className="icon-btn"
             aria-label="Toggle theme"
           >
             {theme === 'dark' ? (
@@ -55,18 +55,18 @@ export function Header() {
           </button>
 
           {/* Notifications */}
-          <button className="p-2 text-slate-500 hover:text-slate-600 dark:text-slate-400 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors relative">
+          <button className="icon-btn relative">
             <Bell className="h-5 w-5" />
-            <span className="absolute top-1 right-1 h-2 w-2 bg-red-500 rounded-full" />
+            <span className="absolute top-1.5 right-1.5 h-2 w-2 bg-red-500 rounded-full" />
           </button>
 
           {/* User menu */}
           <div className="relative">
             <button
               onClick={() => setShowUserMenu(!showUserMenu)}
-              className="flex items-center space-x-2 p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+              className="flex items-center space-x-2 min-w-[44px] min-h-[44px] p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
             >
-              <div className="h-8 w-8 rounded-full bg-primary-500 flex items-center justify-center text-white font-medium">
+              <div className="h-9 w-9 rounded-full bg-primary-500 flex items-center justify-center text-white font-medium">
                 {profile?.full_name?.[0]?.toUpperCase() || profile?.email?.[0]?.toUpperCase() || 'U'}
               </div>
             </button>

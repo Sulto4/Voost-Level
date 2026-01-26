@@ -167,7 +167,7 @@ export function ClientDetailPage() {
               key={tab}
               onClick={() => setActiveTab(tab)}
               className={clsx(
-                'py-4 px-1 border-b-2 font-medium text-sm transition-colors whitespace-nowrap',
+                'py-4 px-2 min-w-[44px] min-h-[44px] border-b-2 font-medium text-sm transition-colors whitespace-nowrap',
                 activeTab === tab
                   ? 'border-primary-500 text-primary-600 dark:text-primary-400'
                   : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'
@@ -190,29 +190,29 @@ export function ClientDetailPage() {
                 </h3>
                 <div className="space-y-3">
                   {client.email && (
-                    <div className="flex items-center text-slate-600 dark:text-slate-300">
-                      <Mail className="h-5 w-5 mr-3 text-slate-400" />
-                      <a href={`mailto:${client.email}`} className="hover:text-primary-600">
+                    <div className="flex items-center text-slate-600 dark:text-slate-300 min-h-[44px]">
+                      <Mail className="h-5 w-5 mr-3 text-slate-400 flex-shrink-0" />
+                      <a href={`mailto:${client.email}`} className="hover:text-primary-600 min-h-[44px] inline-flex items-center">
                         {client.email}
                       </a>
                     </div>
                   )}
                   {client.phone && (
-                    <div className="flex items-center text-slate-600 dark:text-slate-300">
-                      <Phone className="h-5 w-5 mr-3 text-slate-400" />
-                      <a href={`tel:${client.phone}`} className="hover:text-primary-600">
+                    <div className="flex items-center text-slate-600 dark:text-slate-300 min-h-[44px]">
+                      <Phone className="h-5 w-5 mr-3 text-slate-400 flex-shrink-0" />
+                      <a href={`tel:${client.phone}`} className="hover:text-primary-600 min-h-[44px] inline-flex items-center">
                         {client.phone}
                       </a>
                     </div>
                   )}
                   {client.website && (
-                    <div className="flex items-center text-slate-600 dark:text-slate-300">
-                      <Globe className="h-5 w-5 mr-3 text-slate-400" />
+                    <div className="flex items-center text-slate-600 dark:text-slate-300 min-h-[44px]">
+                      <Globe className="h-5 w-5 mr-3 text-slate-400 flex-shrink-0" />
                       <a
                         href={client.website}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="hover:text-primary-600"
+                        className="hover:text-primary-600 min-h-[44px] inline-flex items-center"
                       >
                         {client.website}
                       </a>

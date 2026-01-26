@@ -85,7 +85,7 @@ export function SettingsPage() {
                 key={tab.name}
                 onClick={() => setActiveTab(tab.name)}
                 className={clsx(
-                  'w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors',
+                  'w-full flex items-center px-3 py-2.5 min-h-[44px] text-sm font-medium rounded-lg transition-colors',
                   activeTab === tab.name
                     ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300'
                     : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
@@ -110,7 +110,7 @@ export function SettingsPage() {
                 <div className="h-20 w-20 rounded-full bg-primary-500 flex items-center justify-center text-white text-2xl font-bold">
                   {profile?.full_name?.[0]?.toUpperCase() || profile?.email?.[0]?.toUpperCase() || 'U'}
                 </div>
-                <button className="btn-outline">Change Avatar</button>
+                <button className="btn-outline min-h-[44px]">Change Avatar</button>
               </div>
 
               <div className="max-w-md space-y-4">

@@ -94,7 +94,7 @@ export function ProjectsPage() {
             className="input pl-10"
           />
         </div>
-        <button className="btn-outline">
+        <button className="btn-outline min-h-[44px]">
           <Filter className="h-5 w-5 mr-2" />
           Filters
         </button>
@@ -161,7 +161,7 @@ export function ProjectsPage() {
                     <div>
                       <Link
                         to={`/projects/${project.id}`}
-                        className="text-sm font-medium text-slate-900 dark:text-white hover:text-primary-600 dark:hover:text-primary-400"
+                        className="text-sm font-medium text-slate-900 dark:text-white hover:text-primary-600 dark:hover:text-primary-400 inline-flex items-center min-h-[44px] -my-3"
                       >
                         {project.name}
                       </Link>
@@ -177,7 +177,7 @@ export function ProjectsPage() {
                       <div>
                         <Link
                           to={`/clients/${project.clients.id}`}
-                          className="text-sm text-slate-900 dark:text-white hover:text-primary-600 dark:hover:text-primary-400"
+                          className="text-sm text-slate-900 dark:text-white hover:text-primary-600 dark:hover:text-primary-400 inline-flex items-center min-h-[44px] -my-3"
                         >
                           {project.clients.name}
                         </Link>
@@ -218,7 +218,7 @@ export function ProjectsPage() {
                     )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right">
-                    <button className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
+                    <button className="icon-btn">
                       <MoreHorizontal className="h-5 w-5" />
                     </button>
                   </td>

@@ -151,7 +151,7 @@ export function ClientsPage() {
         <div className="relative">
           <button
             onClick={() => setShowFilters(!showFilters)}
-            className={`btn-outline ${statusFilter ? 'border-primary-500 text-primary-600' : ''}`}
+            className={`btn-outline min-h-[44px] ${statusFilter ? 'border-primary-500 text-primary-600' : ''}`}
           >
             <Filter className="h-5 w-5 mr-2" />
             Filters
@@ -289,7 +289,7 @@ export function ClientsPage() {
                       <div className="ml-4">
                         <Link
                           to={`/clients/${client.id}`}
-                          className="text-sm font-medium text-slate-900 dark:text-white hover:text-primary-600 dark:hover:text-primary-400"
+                          className="text-sm font-medium text-slate-900 dark:text-white hover:text-primary-600 dark:hover:text-primary-400 inline-flex items-center min-h-[44px] -my-3"
                         >
                           {client.name}
                         </Link>
@@ -328,7 +328,7 @@ export function ClientsPage() {
                     {client.source || '-'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right">
-                    <button className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
+                    <button className="icon-btn">
                       <MoreHorizontal className="h-5 w-5" />
                     </button>
                   </td>
@@ -349,7 +349,7 @@ export function ClientsPage() {
                 <button
                   onClick={goToPreviousPage}
                   disabled={!hasPreviousPage}
-                  className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="min-w-[44px] min-h-[44px] p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors inline-flex items-center justify-center"
                   aria-label="Previous page"
                 >
                   <ChevronLeft className="h-5 w-5" />
@@ -360,7 +360,7 @@ export function ClientsPage() {
                 <button
                   onClick={goToNextPage}
                   disabled={!hasNextPage}
-                  className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="min-w-[44px] min-h-[44px] p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors inline-flex items-center justify-center"
                   aria-label="Next page"
                 >
                   <ChevronRight className="h-5 w-5" />
