@@ -1,10 +1,60 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { Plus, X, RotateCcw, Save, AlertCircle } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { LoadingSpinner } from '../ui/LoadingSpinner'
+import { MultiSelect } from '../ui/MultiSelect'
+import { RichTextEditor } from '../ui/RichTextEditor'
 import { supabase } from '../../lib/supabase'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import { useAuth } from '../../context/AuthContext'
+import { useToast } from '../../context/ToastContext'
+import { useFormDraft } from '../../hooks/useFormDraft'
 import type { ClientStatus } from '../../types/database'
+
+// Predefined tag options for clients
+const TAG_OPTIONS = [
+  { value: 'vip', label: 'VIP' },
+  { value: 'enterprise', label: 'Enterprise' },
+  { value: 'startup', label: 'Startup' },
+  { value: 'smb', label: 'SMB' },
+  { value: 'priority', label: 'Priority' },
+  { value: 'potential', label: 'High Potential' },
+  { value: 'partner', label: 'Partner' },
+  { value: 'referral-source', label: 'Referral Source' },
+]
+
+interface CustomField {
+  key: string
+  value: string
+}
+
+interface ClientFormData {
+  name: string
+  company: string
+  email: string
+  phone: string
+  website: string
+  status: ClientStatus
+  value: string
+  source: string
+  notes: string
+  tags: string[]
+  customFields: CustomField[]
+}
+
+const initialFormData: ClientFormData = {
+  name: '',
+  company: '',
+  email: '',
+  phone: '',
+  website: '',
+  status: 'lead',
+  value: '',
+  source: '',
+  notes: '',
+  tags: [],
+  customFields: [],
+}
 
 /**
  * Validates phone number format
@@ -83,20 +133,49 @@ interface AddClientModalProps {
 export function AddClientModal({ isOpen, onClose, onClientAdded }: AddClientModalProps) {
   const { currentWorkspace } = useWorkspace()
   const { user } = useAuth()
+  const { success: showSuccess, error: showError } = useToast()
 
-  const [name, setName] = useState('')
-  const [company, setCompany] = useState('')
-  const [email, setEmail] = useState('')
-  const [phone, setPhone] = useState('')
-  const [website, setWebsite] = useState('')
-  const [status, setStatus] = useState<ClientStatus>('lead')
-  const [value, setValue] = useState('')
-  const [source, setSource] = useState('')
-  const [notes, setNotes] = useState('')
+  // Use form draft hook for auto-save functionality
+  const {
+    data: formData,
+    setData: setFormData,
+    hasDraft,
+    clearDraft,
+    dismissDraftNotice,
+    resetForm,
+    justSaved,
+  } = useFormDraft<ClientFormData>({
+    storageKey: `add-client-${currentWorkspace?.id || 'default'}`,
+    initialData: initialFormData,
+    debounceMs: 1000,
+    enabled: isOpen, // Only save when modal is open
+  })
+
+  // Destructure form data for easier access
+  const { name, company, email, phone, website, status, value, source, notes, tags, customFields } = formData
+
+  // Helper to update a single field
+  const updateField = <K extends keyof ClientFormData>(field: K, fieldValue: ClientFormData[K]) => {
+    setFormData(prev => ({ ...prev, [field]: fieldValue }))
+  }
 
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
+
+  function addCustomField() {
+    updateField('customFields', [...customFields, { key: '', value: '' }])
+  }
+
+  function removeCustomField(index: number) {
+    updateField('customFields', customFields.filter((_, i) => i !== index))
+  }
+
+  function updateCustomField(index: number, field: 'key' | 'value', fieldValue: string) {
+    const updated = [...customFields]
+    updated[index][field] = fieldValue
+    updateField('customFields', updated)
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -127,6 +206,18 @@ export function AddClientModal({ isOpen, onClose, onClientAdded }: AddClientModa
 
     setLoading(true)
 
+    // Convert custom fields array to object and include tags
+    const customFieldsObj: Record<string, string | string[]> = {}
+    customFields.forEach(({ key, value }) => {
+      if (key.trim()) {
+        customFieldsObj[key.trim()] = value.trim()
+      }
+    })
+    // Add tags to custom fields if any selected
+    if (tags.length > 0) {
+      customFieldsObj['tags'] = tags
+    }
+
     const { error: insertError } = await supabase
       .from('clients')
       .insert({
@@ -140,15 +231,18 @@ export function AddClientModal({ isOpen, onClose, onClientAdded }: AddClientModa
         value: value ? parseFloat(value) : null,
         source: source.trim() || null,
         notes: notes.trim() || null,
+        custom_fields: Object.keys(customFieldsObj).length > 0 ? customFieldsObj : null,
         created_by: user.id,
       })
 
     if (insertError) {
       setError(insertError.message || 'Failed to create client')
+      showError('Failed to create client: ' + (insertError.message || 'Unknown error'))
       setLoading(false)
     } else {
       setSuccess(true)
       setLoading(false)
+      showSuccess(`Client "${name.trim()}" created successfully!`)
       onClientAdded?.()
       // Auto-close after success
       setTimeout(() => {
@@ -157,20 +251,30 @@ export function AddClientModal({ isOpen, onClose, onClientAdded }: AddClientModa
     }
   }
 
+  function handleReset() {
+    resetForm()
+    setError('')
+  }
+
   function handleClose() {
-    setName('')
-    setCompany('')
-    setEmail('')
-    setPhone('')
-    setWebsite('')
-    setStatus('lead')
-    setValue('')
-    setSource('')
-    setNotes('')
+    // On successful submit, clear the draft
+    if (success) {
+      clearDraft()
+    }
+    // Don't reset form data here - let the draft persist in localStorage
+    // The form will be populated from draft when reopened
     setError('')
     setSuccess(false)
+    dismissDraftNotice()
     onClose()
   }
+
+  // Clear draft after successful submission
+  useEffect(() => {
+    if (success) {
+      clearDraft()
+    }
+  }, [success, clearDraft])
 
   return (
     <Modal isOpen={isOpen} onClose={handleClose} title="Add New Client" size="lg">
@@ -187,6 +291,36 @@ export function AddClientModal({ isOpen, onClose, onClientAdded }: AddClientModa
           </div>
         )}
 
+        {/* Draft restored notification */}
+        {hasDraft && (
+          <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm text-amber-700 dark:text-amber-300 font-medium">
+                Draft restored
+              </p>
+              <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">
+                Your previous unsaved data has been restored.
+                <button
+                  type="button"
+                  onClick={handleReset}
+                  className="ml-1 underline hover:no-underline"
+                >
+                  Clear draft
+                </button>
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={dismissDraftNotice}
+              className="p-1 text-amber-500 hover:text-amber-700 dark:hover:text-amber-300"
+              aria-label="Dismiss"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label htmlFor="clientName" className="label">
@@ -196,7 +330,7 @@ export function AddClientModal({ isOpen, onClose, onClientAdded }: AddClientModa
               id="clientName"
               type="text"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => updateField('name', e.target.value)}
               className="input"
               placeholder="John Smith"
               autoFocus
@@ -212,7 +346,7 @@ export function AddClientModal({ isOpen, onClose, onClientAdded }: AddClientModa
               id="company"
               type="text"
               value={company}
-              onChange={(e) => setCompany(e.target.value)}
+              onChange={(e) => updateField('company', e.target.value)}
               className="input"
               placeholder="Acme Inc."
               disabled={success}
@@ -227,7 +361,7 @@ export function AddClientModal({ isOpen, onClose, onClientAdded }: AddClientModa
               id="clientEmail"
               type="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => updateField('email', e.target.value)}
               className="input"
               placeholder="john@example.com"
               disabled={success}
@@ -242,7 +376,7 @@ export function AddClientModal({ isOpen, onClose, onClientAdded }: AddClientModa
               id="phone"
               type="tel"
               value={phone}
-              onChange={(e) => setPhone(e.target.value)}
+              onChange={(e) => updateField('phone', e.target.value)}
               className="input"
               placeholder="+1 (555) 000-0000"
               disabled={success}
@@ -257,7 +391,7 @@ export function AddClientModal({ isOpen, onClose, onClientAdded }: AddClientModa
               id="website"
               type="text"
               value={website}
-              onChange={(e) => setWebsite(e.target.value)}
+              onChange={(e) => updateField('website', e.target.value)}
               className="input"
               placeholder="example.com"
               disabled={success}
@@ -271,7 +405,7 @@ export function AddClientModal({ isOpen, onClose, onClientAdded }: AddClientModa
             <select
               id="status"
               value={status}
-              onChange={(e) => setStatus(e.target.value as ClientStatus)}
+              onChange={(e) => updateField('status', e.target.value as ClientStatus)}
               className="input"
               disabled={success}
             >
@@ -290,7 +424,7 @@ export function AddClientModal({ isOpen, onClose, onClientAdded }: AddClientModa
               id="value"
               type="number"
               value={value}
-              onChange={(e) => setValue(e.target.value)}
+              onChange={(e) => updateField('value', e.target.value)}
               className="input"
               placeholder="10000"
               min="0"
@@ -307,9 +441,22 @@ export function AddClientModal({ isOpen, onClose, onClientAdded }: AddClientModa
               id="source"
               type="text"
               value={source}
-              onChange={(e) => setSource(e.target.value)}
+              onChange={(e) => updateField('source', e.target.value)}
               className="input"
               placeholder="Website, Referral, Social Media, etc."
+              disabled={success}
+            />
+          </div>
+
+          <div className="md:col-span-2">
+            <label className="label">
+              Tags
+            </label>
+            <MultiSelect
+              options={TAG_OPTIONS}
+              selected={tags}
+              onChange={(selected) => updateField('tags', selected)}
+              placeholder="Select client tags..."
               disabled={success}
             />
           </div>
@@ -318,33 +465,107 @@ export function AddClientModal({ isOpen, onClose, onClientAdded }: AddClientModa
             <label htmlFor="notes" className="label">
               Notes
             </label>
-            <textarea
-              id="notes"
+            <RichTextEditor
               value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              className="input min-h-[80px]"
+              onChange={(value) => updateField('notes', value)}
               placeholder="Additional notes about this client..."
               disabled={success}
+              minHeight="80px"
             />
+          </div>
+
+          {/* Custom Fields Section */}
+          <div className="md:col-span-2 border-t border-slate-200 dark:border-slate-700 pt-4">
+            <div className="flex items-center justify-between mb-3">
+              <label className="label mb-0">Custom Fields</label>
+              <button
+                type="button"
+                onClick={addCustomField}
+                className="text-sm text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300 flex items-center gap-1"
+                disabled={success}
+              >
+                <Plus className="h-4 w-4" />
+                Add Field
+              </button>
+            </div>
+
+            {customFields.length === 0 ? (
+              <p className="text-sm text-slate-500 dark:text-slate-400 italic">
+                No custom fields. Click "Add Field" to create one.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {customFields.map((field, index) => (
+                  <div key={index} className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={field.key}
+                      onChange={(e) => updateCustomField(index, 'key', e.target.value)}
+                      className="input flex-1"
+                      placeholder="Field name (e.g., Industry)"
+                      disabled={success}
+                    />
+                    <input
+                      type="text"
+                      value={field.value}
+                      onChange={(e) => updateCustomField(index, 'value', e.target.value)}
+                      className="input flex-1"
+                      placeholder="Value (e.g., Technology)"
+                      disabled={success}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeCustomField(index)}
+                      className="p-2 text-slate-400 hover:text-red-500 dark:text-slate-500 dark:hover:text-red-400"
+                      disabled={success}
+                      aria-label="Remove custom field"
+                    >
+                      <X className="h-5 w-5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
-        <div className="flex justify-end gap-3 pt-4">
-          <button
-            type="button"
-            onClick={handleClose}
-            className="btn-outline"
-            disabled={loading}
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            className="btn-primary flex items-center"
-            disabled={loading || success}
-          >
-            {loading ? <LoadingSpinner size="sm" /> : 'Add Client'}
-          </button>
+        <div className="flex items-center justify-between gap-3 pt-4 border-t border-slate-200 dark:border-slate-700">
+          {/* Auto-save indicator */}
+          <div className="flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500">
+            {justSaved && (
+              <>
+                <Save className="h-3.5 w-3.5" />
+                <span>Draft saved</span>
+              </>
+            )}
+          </div>
+
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={handleReset}
+              className="btn-outline flex items-center"
+              disabled={loading || success}
+            >
+              <RotateCcw className="h-4 w-4 mr-2" />
+              Reset
+            </button>
+            <button
+              type="button"
+              onClick={handleClose}
+              className="btn-outline"
+              disabled={loading}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="btn-primary flex items-center"
+              disabled={loading || success}
+            >
+              {loading ? <LoadingSpinner size="sm" /> : 'Add Client'}
+            </button>
+          </div>
         </div>
       </form>
     </Modal>

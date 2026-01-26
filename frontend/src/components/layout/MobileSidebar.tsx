@@ -19,13 +19,21 @@ import { useState } from 'react'
 import { CreateWorkspaceModal } from '../workspace/CreateWorkspaceModal'
 
 const navigation = [
-  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'Clients', href: '/clients', icon: Users },
-  { name: 'Pipeline', href: '/pipeline', icon: Kanban },
-  { name: 'Projects', href: '/projects', icon: FolderKanban },
-  { name: 'Team', href: '/team', icon: UserCog },
-  { name: 'Settings', href: '/settings', icon: Settings },
+  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, minRole: 'viewer' as const },
+  { name: 'Clients', href: '/clients', icon: Users, minRole: 'viewer' as const },
+  { name: 'Pipeline', href: '/pipeline', icon: Kanban, minRole: 'viewer' as const },
+  { name: 'Projects', href: '/projects', icon: FolderKanban, minRole: 'viewer' as const },
+  { name: 'Team', href: '/team', icon: UserCog, minRole: 'member' as const },
+  { name: 'Settings', href: '/settings', icon: Settings, minRole: 'viewer' as const },
 ]
+
+// Role hierarchy for menu visibility
+const roleLevel: Record<string, number> = {
+  owner: 4,
+  admin: 3,
+  member: 2,
+  viewer: 1,
+}
 
 interface MobileSidebarProps {
   isOpen: boolean
@@ -33,7 +41,7 @@ interface MobileSidebarProps {
 }
 
 export function MobileSidebar({ isOpen, onClose }: MobileSidebarProps) {
-  const { workspaces, currentWorkspace, selectWorkspace } = useWorkspace()
+  const { workspaces, currentWorkspace, currentRole, selectWorkspace } = useWorkspace()
   const { profile } = useAuth()
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
@@ -153,7 +161,13 @@ export function MobileSidebar({ isOpen, onClose }: MobileSidebarProps) {
 
           {/* Navigation */}
           <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto">
-            {navigation.map((item) => (
+            {navigation
+              .filter((item) => {
+                const userRoleLevel = currentRole ? roleLevel[currentRole] || 0 : 0
+                const requiredLevel = roleLevel[item.minRole] || 0
+                return userRoleLevel >= requiredLevel
+              })
+              .map((item) => (
               <NavLink
                 key={item.name}
                 to={item.href}

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Plus, Search, Filter, MoreHorizontal, Calendar, DollarSign, Building2, AlertTriangle } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useWorkspace } from '../../context/WorkspaceContext'
+import { AddProjectModal } from '../../components/projects/AddProjectModal'
 import type { Project, Client } from '../../types/database'
 
 interface ProjectWithClient extends Project {
@@ -14,6 +15,7 @@ export function ProjectsPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [projects, setProjects] = useState<ProjectWithClient[]>([])
   const [loading, setLoading] = useState(true)
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false)
 
   useEffect(() => {
     if (currentWorkspace) {
@@ -86,7 +88,7 @@ export function ProjectsPage() {
             Track and manage your client projects
           </p>
         </div>
-        <button className="btn-primary">
+        <button className="btn-primary" onClick={() => setIsAddModalOpen(true)}>
           <Plus className="h-5 w-5 mr-2" />
           Add Project
         </button>
@@ -130,7 +132,7 @@ export function ProjectsPage() {
               : 'Create your first project to start tracking work for your clients.'}
           </p>
           {!searchQuery && (
-            <button className="btn-primary">
+            <button className="btn-primary" onClick={() => setIsAddModalOpen(true)}>
               <Plus className="h-5 w-5 mr-2" />
               Create Your First Project
             </button>
@@ -284,6 +286,12 @@ export function ProjectsPage() {
           </div>
         </div>
       )}
+
+      <AddProjectModal
+        isOpen={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
+        onProjectAdded={fetchProjects}
+      />
     </div>
   )
 }

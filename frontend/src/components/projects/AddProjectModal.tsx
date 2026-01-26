@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Modal } from '../ui/Modal'
 import { LoadingSpinner } from '../ui/LoadingSpinner'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../context/AuthContext'
+import { useWorkspace } from '../../context/WorkspaceContext'
 import type { ProjectStatus, Client } from '../../types/database'
 
 interface AddProjectModalProps {
@@ -14,6 +15,7 @@ interface AddProjectModalProps {
 
 export function AddProjectModal({ isOpen, onClose, client, onProjectAdded }: AddProjectModalProps) {
   const { user } = useAuth()
+  const { currentWorkspace } = useWorkspace()
 
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
@@ -21,10 +23,39 @@ export function AddProjectModal({ isOpen, onClose, client, onProjectAdded }: Add
   const [startDate, setStartDate] = useState('')
   const [dueDate, setDueDate] = useState('')
   const [budget, setBudget] = useState('')
+  const [selectedClientId, setSelectedClientId] = useState('')
+  const [clients, setClients] = useState<Client[]>([])
+  const [loadingClients, setLoadingClients] = useState(false)
 
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
+
+  // Fetch clients when modal opens and no client is pre-selected
+  useEffect(() => {
+    if (isOpen && !client && currentWorkspace) {
+      fetchClients()
+    }
+  }, [isOpen, client, currentWorkspace])
+
+  async function fetchClients() {
+    if (!currentWorkspace) return
+    setLoadingClients(true)
+    const { data, error } = await supabase
+      .from('clients')
+      .select('*')
+      .eq('workspace_id', currentWorkspace.id)
+      .is('deleted_at', null)
+      .order('name')
+
+    if (!error && data) {
+      setClients(data)
+    }
+    setLoadingClients(false)
+  }
+
+  // Get the active client (either prop or selected from dropdown)
+  const activeClient = client || clients.find(c => c.id === selectedClientId) || null
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -36,7 +67,7 @@ export function AddProjectModal({ isOpen, onClose, client, onProjectAdded }: Add
       return
     }
 
-    if (!client || !user) {
+    if (!activeClient || !user) {
       setError('No client selected')
       return
     }
@@ -52,7 +83,7 @@ export function AddProjectModal({ isOpen, onClose, client, onProjectAdded }: Add
     const { error: insertError } = await supabase
       .from('projects')
       .insert({
-        client_id: client.id,
+        client_id: activeClient.id,
         name: name.trim(),
         description: description.trim() || null,
         status,
@@ -83,6 +114,7 @@ export function AddProjectModal({ isOpen, onClose, client, onProjectAdded }: Add
     setStartDate('')
     setDueDate('')
     setBudget('')
+    setSelectedClientId('')
     setError('')
     setSuccess(false)
     onClose()
@@ -103,10 +135,37 @@ export function AddProjectModal({ isOpen, onClose, client, onProjectAdded }: Add
           </div>
         )}
 
-        {client && (
+        {client ? (
           <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
             <p className="text-sm text-slate-500 dark:text-slate-400">Creating project for</p>
             <p className="font-medium text-slate-900 dark:text-white">{client.name}</p>
+          </div>
+        ) : (
+          <div>
+            <label htmlFor="clientSelect" className="label">
+              Client *
+            </label>
+            {loadingClients ? (
+              <div className="input flex items-center text-slate-400">
+                <LoadingSpinner size="sm" />
+                <span className="ml-2">Loading clients...</span>
+              </div>
+            ) : (
+              <select
+                id="clientSelect"
+                value={selectedClientId}
+                onChange={(e) => setSelectedClientId(e.target.value)}
+                className="input"
+                disabled={success}
+              >
+                <option value="">Select a client...</option>
+                {clients.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}{c.company ? ` (${c.company})` : ''}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
         )}
 

@@ -23,8 +23,35 @@ interface FilterPreset {
   createdAt: string
 }
 
+/**
+ * Helper function to highlight matching text in search results
+ * Returns JSX elements with highlighted spans for matches
+ */
+function highlightMatch(text: string, query: string): React.ReactNode {
+  if (!query || !text) return text
+
+  const lowerText = text.toLowerCase()
+  const lowerQuery = query.toLowerCase()
+  const index = lowerText.indexOf(lowerQuery)
+
+  if (index === -1) return text
+
+  const before = text.slice(0, index)
+  const match = text.slice(index, index + query.length)
+  const after = text.slice(index + query.length)
+
+  return (
+    <>
+      {before}
+      <mark className="bg-yellow-200 dark:bg-yellow-500/40 text-inherit rounded px-0.5">{match}</mark>
+      {highlightMatch(after, query)}
+    </>
+  )
+}
+
 export function ClientsPage() {
-  const { currentWorkspace } = useWorkspace()
+  const { currentWorkspace, currentRole } = useWorkspace()
+  const canEdit = currentRole !== 'viewer'
   const [searchParams, setSearchParams] = useSearchParams()
   const [searchQuery, setSearchQuery] = useState('')
   const [clients, setClients] = useState<Client[]>([])
@@ -33,11 +60,23 @@ export function ClientsPage() {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
   const [totalCount, setTotalCount] = useState(0)
-  const [statusFilter, setStatusFilter] = useState<ClientStatus | null>(null)
+
+  // Initialize filters from URL params synchronously to avoid race conditions
+  const [statusFilter, setStatusFilter] = useState<ClientStatus | null>(() => {
+    const statusParam = searchParams.get('status')
+    if (statusParam && ['lead', 'active', 'inactive', 'churned'].includes(statusParam)) {
+      return statusParam as ClientStatus
+    }
+    return null
+  })
   const [dateFilter, setDateFilter] = useState<DateFilter>(null)
-  const [sourceFilter, setSourceFilter] = useState<string | null>(null)
+  const [sourceFilter, setSourceFilter] = useState<string | null>(() => {
+    return searchParams.get('source') || null
+  })
   const [availableSources, setAvailableSources] = useState<string[]>([])
-  const [showFilters, setShowFilters] = useState(false)
+  const [showFilters, setShowFilters] = useState(() => {
+    return !!searchParams.get('status') || !!searchParams.get('source')
+  })
   const [sortField, setSortField] = useState<SortField>('created_at')
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
   const [selectedClients, setSelectedClients] = useState<Set<string>>(new Set())
@@ -46,6 +85,9 @@ export function ClientsPage() {
   const [deleteSuccess, setDeleteSuccess] = useState<string | null>(null)
   const [showDeletedClients, setShowDeletedClients] = useState(false)
   const [restoreSuccess, setRestoreSuccess] = useState<string | null>(null)
+  const [isPermanentDeleteModalOpen, setIsPermanentDeleteModalOpen] = useState(false)
+  const [isPermanentlyDeleting, setIsPermanentlyDeleting] = useState(false)
+  const [permanentDeleteSuccess, setPermanentDeleteSuccess] = useState<string | null>(null)
 
   // Filter presets state
   const [filterPresets, setFilterPresets] = useState<FilterPreset[]>([])
@@ -55,6 +97,13 @@ export function ClientsPage() {
   const [presetError, setPresetError] = useState('')
   const [showExportDropdown, setShowExportDropdown] = useState(false)
 
+  // Recent searches state
+  const [recentSearches, setRecentSearches] = useState<string[]>([])
+  const [showRecentSearches, setShowRecentSearches] = useState(false)
+
+  // Search suggestions state
+  const [showSearchSuggestions, setShowSearchSuggestions] = useState(false)
+
   // Handle ?action=add query parameter to open Add Client modal from command palette
   useEffect(() => {
     if (searchParams.get('action') === 'add') {
@@ -63,6 +112,45 @@ export function ClientsPage() {
       setSearchParams({}, { replace: true })
     }
   }, [searchParams, setSearchParams])
+
+  // Initialize filters from URL query params
+  useEffect(() => {
+    const statusParam = searchParams.get('status')
+    const sourceParam = searchParams.get('source')
+
+    if (statusParam && ['lead', 'active', 'inactive', 'churned'].includes(statusParam)) {
+      setStatusFilter(statusParam as ClientStatus)
+      setShowFilters(true)
+    } else if (!statusParam && statusFilter) {
+      // URL has no status param but we have a filter - URL takes precedence
+      // This handles fresh navigation
+    }
+
+    if (sourceParam) {
+      setSourceFilter(sourceParam)
+      setShowFilters(true)
+    }
+  }, [searchParams]) // Re-run when URL params change
+
+  // Sync filters to URL params
+  useEffect(() => {
+    const newParams = new URLSearchParams()
+
+    if (statusFilter) {
+      newParams.set('status', statusFilter)
+    }
+    if (sourceFilter) {
+      newParams.set('source', sourceFilter)
+    }
+
+    // Only update if params actually changed to avoid infinite loops
+    const currentParamsStr = searchParams.toString()
+    const newParamsStr = newParams.toString()
+
+    if (currentParamsStr !== newParamsStr) {
+      setSearchParams(newParams, { replace: true })
+    }
+  }, [statusFilter, sourceFilter])
 
   // Load saved filter presets from localStorage on mount
   useEffect(() => {
@@ -80,6 +168,71 @@ export function ClientsPage() {
   useEffect(() => {
     localStorage.setItem('clientFilterPresets', JSON.stringify(filterPresets))
   }, [filterPresets])
+
+  // Load recent searches from localStorage on mount
+  useEffect(() => {
+    const savedRecentSearches = localStorage.getItem('clientRecentSearches')
+    if (savedRecentSearches) {
+      try {
+        setRecentSearches(JSON.parse(savedRecentSearches))
+      } catch {
+        console.error('Failed to load recent searches')
+      }
+    }
+  }, [])
+
+  // Save recent searches to localStorage whenever they change
+  useEffect(() => {
+    localStorage.setItem('clientRecentSearches', JSON.stringify(recentSearches))
+  }, [recentSearches])
+
+  // Add search to recent searches
+  function addToRecentSearches(query: string) {
+    if (!query.trim()) return
+    const trimmedQuery = query.trim()
+    // Remove if already exists and add to front
+    const updatedSearches = [
+      trimmedQuery,
+      ...recentSearches.filter(s => s.toLowerCase() !== trimmedQuery.toLowerCase())
+    ].slice(0, 5) // Keep only last 5 searches
+    setRecentSearches(updatedSearches)
+  }
+
+  // Clear a specific recent search
+  function removeRecentSearch(query: string) {
+    setRecentSearches(recentSearches.filter(s => s !== query))
+  }
+
+  // Clear all recent searches
+  function clearRecentSearches() {
+    setRecentSearches([])
+  }
+
+  // Generate search suggestions based on current query
+  function getSearchSuggestions(): string[] {
+    if (!searchQuery.trim() || searchQuery.trim().length < 1) return []
+
+    const query = searchQuery.trim().toLowerCase()
+    const suggestions = new Set<string>()
+
+    // Search through clients for matching names, companies, emails
+    clients.forEach(client => {
+      if (client.name.toLowerCase().includes(query)) {
+        suggestions.add(client.name)
+      }
+      if (client.company?.toLowerCase().includes(query)) {
+        suggestions.add(client.company)
+      }
+      if (client.email?.toLowerCase().includes(query)) {
+        suggestions.add(client.email)
+      }
+    })
+
+    // Return up to 5 suggestions
+    return Array.from(suggestions).slice(0, 5)
+  }
+
+  const searchSuggestions = getSearchSuggestions()
 
   // Save current filters as a preset
   function saveFilterPreset() {
@@ -469,6 +622,33 @@ export function ClientsPage() {
     setIsDeleting(false)
   }
 
+  // Permanently delete selected deleted clients (hard delete)
+  async function handlePermanentDelete() {
+    if (selectedClients.size === 0) return
+
+    setIsPermanentlyDeleting(true)
+    const clientIds = Array.from(selectedClients)
+
+    const { error } = await supabase
+      .from('clients')
+      .delete()
+      .in('id', clientIds)
+
+    if (error) {
+      console.error('Error permanently deleting clients:', error)
+      alert('Failed to permanently delete clients. Please try again.')
+    } else {
+      setPermanentDeleteSuccess(`Permanently deleted ${clientIds.length} client${clientIds.length > 1 ? 's' : ''}`)
+      setSelectedClients(new Set())
+      fetchClients()
+      // Clear success message after 3 seconds
+      setTimeout(() => setPermanentDeleteSuccess(null), 3000)
+    }
+
+    setIsPermanentlyDeleting(false)
+    setIsPermanentDeleteModalOpen(false)
+  }
+
   // Helper function to fetch export data
   async function fetchExportData() {
     if (!currentWorkspace) return null
@@ -623,7 +803,7 @@ export function ClientsPage() {
               </>
             )}
           </button>
-          {!showDeletedClients && (
+          {!showDeletedClients && canEdit && (
             <button
               onClick={() => setIsAddModalOpen(true)}
               className="btn-primary"
@@ -638,23 +818,115 @@ export function ClientsPage() {
       {/* Filters and Search */}
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400 z-10" />
           <input
             type="search"
             placeholder="Search clients..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => {
+              setSearchQuery(e.target.value)
+              setShowSearchSuggestions(true)
+            }}
+            onFocus={() => {
+              setShowRecentSearches(true)
+              setShowSearchSuggestions(true)
+            }}
+            onBlur={() => {
+              // Delay hiding to allow click on dropdown
+              setTimeout(() => {
+                setShowRecentSearches(false)
+                setShowSearchSuggestions(false)
+              }, 200)
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && searchQuery.trim()) {
+                addToRecentSearches(searchQuery)
+                setShowSearchSuggestions(false)
+              }
+            }}
             className="input pl-10"
           />
+          {/* Recent Searches Dropdown */}
+          {showRecentSearches && recentSearches.length > 0 && !searchQuery && (
+            <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 z-20 overflow-hidden">
+              <div className="flex items-center justify-between px-3 py-2 bg-slate-50 dark:bg-slate-700/50 border-b border-slate-200 dark:border-slate-600">
+                <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Recent Searches</span>
+                <button
+                  onClick={(e) => {
+                    e.preventDefault()
+                    clearRecentSearches()
+                  }}
+                  className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                >
+                  Clear all
+                </button>
+              </div>
+              <div className="py-1">
+                {recentSearches.map((query, index) => (
+                  <div
+                    key={index}
+                    className="flex items-center justify-between px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer group"
+                    onClick={() => {
+                      setSearchQuery(query)
+                      setShowRecentSearches(false)
+                    }}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Search className="h-4 w-4 text-slate-400" />
+                      <span className="text-sm text-slate-700 dark:text-slate-300">{query}</span>
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        removeRecentSearch(query)
+                      }}
+                      className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 dark:hover:text-red-400 transition-opacity"
+                      title="Remove from recent searches"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {/* Search Suggestions Dropdown */}
+          {showSearchSuggestions && searchQuery && searchSuggestions.length > 0 && (
+            <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 z-20 overflow-hidden">
+              <div className="px-3 py-2 bg-slate-50 dark:bg-slate-700/50 border-b border-slate-200 dark:border-slate-600">
+                <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Suggestions</span>
+              </div>
+              <div className="py-1">
+                {searchSuggestions.map((suggestion, index) => (
+                  <div
+                    key={index}
+                    className="flex items-center px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer"
+                    onClick={() => {
+                      setSearchQuery(suggestion)
+                      addToRecentSearches(suggestion)
+                      setShowSearchSuggestions(false)
+                    }}
+                  >
+                    <Search className="h-4 w-4 text-slate-400 mr-2" />
+                    <span className="text-sm text-slate-700 dark:text-slate-300">
+                      {highlightMatch(suggestion, searchQuery)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
-        <button
-          onClick={() => setIsImportModalOpen(true)}
-          className="btn-outline min-h-[44px]"
-          title="Import clients from CSV"
-        >
-          <Upload className="h-5 w-5 mr-2" />
-          Import
-        </button>
+        {canEdit && (
+          <button
+            onClick={() => setIsImportModalOpen(true)}
+            className="btn-outline min-h-[44px]"
+            title="Import clients from CSV"
+          >
+            <Upload className="h-5 w-5 mr-2" />
+            Import
+          </button>
+        )}
         <div className="relative">
           <button
             onClick={() => setShowExportDropdown(!showExportDropdown)}
@@ -885,6 +1157,16 @@ export function ClientsPage() {
         </div>
       )}
 
+      {/* Permanent Delete Success Message */}
+      {permanentDeleteSuccess && (
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 flex items-center gap-3">
+          <Trash2 className="h-5 w-5 text-red-600 dark:text-red-400" />
+          <span className="text-sm font-medium text-red-700 dark:text-red-300">
+            {permanentDeleteSuccess}
+          </span>
+        </div>
+      )}
+
       {/* Bulk Action Bar */}
       {selectedClients.size > 0 && (
         <div className={`${showDeletedClients ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800' : 'bg-primary-50 dark:bg-primary-900/20 border-primary-200 dark:border-primary-800'} border rounded-lg p-4 flex items-center justify-between`}>
@@ -901,32 +1183,44 @@ export function ClientsPage() {
             >
               Clear selection
             </button>
-            {showDeletedClients ? (
-              <button
-                onClick={handleBulkRestore}
-                disabled={isDeleting}
-                className="btn-outline text-sm py-1.5 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 border-green-200 dark:border-green-800"
-              >
-                {isDeleting ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-green-600 mr-1.5"></div>
-                    Restoring...
-                  </>
-                ) : (
-                  <>
-                    <RotateCcw className="h-4 w-4 mr-1.5" />
-                    Restore selected
-                  </>
-                )}
-              </button>
-            ) : (
-              <button
-                onClick={() => setIsDeleteModalOpen(true)}
-                className="btn-outline text-sm py-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 border-red-200 dark:border-red-800"
-              >
-                <Trash2 className="h-4 w-4 mr-1.5" />
-                Delete selected
-              </button>
+            {canEdit && (
+              showDeletedClients ? (
+                <>
+                  <button
+                    onClick={handleBulkRestore}
+                    disabled={isDeleting || isPermanentlyDeleting}
+                    className="btn-outline text-sm py-1.5 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 border-green-200 dark:border-green-800"
+                  >
+                    {isDeleting ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-green-600 mr-1.5"></div>
+                        Restoring...
+                      </>
+                    ) : (
+                      <>
+                        <RotateCcw className="h-4 w-4 mr-1.5" />
+                        Restore selected
+                      </>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => setIsPermanentDeleteModalOpen(true)}
+                    disabled={isDeleting || isPermanentlyDeleting}
+                    className="btn-outline text-sm py-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 border-red-200 dark:border-red-800"
+                  >
+                    <Trash2 className="h-4 w-4 mr-1.5" />
+                    Permanent Delete
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => setIsDeleteModalOpen(true)}
+                  className="btn-outline text-sm py-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 border-red-200 dark:border-red-800"
+                >
+                  <Trash2 className="h-4 w-4 mr-1.5" />
+                  Delete selected
+                </button>
+              )
             )}
           </div>
         </div>
@@ -948,7 +1242,7 @@ export function ClientsPage() {
               ? 'Try a different search term.'
               : 'Get started by adding your first client to track leads and manage relationships.'}
           </p>
-          {!searchQuery.trim() && (
+          {!searchQuery.trim() && canEdit && (
             <button
               onClick={() => setIsAddModalOpen(true)}
               className="btn-primary"
@@ -1055,27 +1349,28 @@ export function ClientsPage() {
                       <div className="ml-4">
                         <Link
                           to={`/clients/${client.id}`}
+                          state={{ from: `/clients${searchParams.toString() ? `?${searchParams.toString()}` : ''}` }}
                           className="text-sm font-medium text-slate-900 dark:text-white hover:text-primary-600 dark:hover:text-primary-400 inline-flex items-center min-h-[44px] -my-3"
                         >
-                          {client.name}
+                          {searchQuery ? highlightMatch(client.name, searchQuery) : client.name}
                         </Link>
                         {client.company && (
                           <div className="text-sm text-slate-500 dark:text-slate-400 flex items-center mt-0.5">
                             <Building2 className="h-3 w-3 mr-1" />
-                            {client.company}
+                            {searchQuery ? highlightMatch(client.company, searchQuery) : client.company}
                           </div>
                         )}
                         <div className="flex items-center gap-3 mt-1">
                           {client.email && (
                             <span className="text-xs text-slate-400 flex items-center">
                               <Mail className="h-3 w-3 mr-1" />
-                              {client.email}
+                              {searchQuery ? highlightMatch(client.email, searchQuery) : client.email}
                             </span>
                           )}
                           {client.phone && (
                             <span className="text-xs text-slate-400 flex items-center">
                               <Phone className="h-3 w-3 mr-1" />
-                              {client.phone}
+                              {searchQuery ? highlightMatch(client.phone, searchQuery) : client.phone}
                             </span>
                           )}
                         </div>
@@ -1234,6 +1529,63 @@ export function ClientsPage() {
                     <>
                       <Trash2 className="h-4 w-4 mr-2" />
                       Delete
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Permanent Delete Confirmation Modal */}
+      {isPermanentDeleteModalOpen && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex min-h-full items-center justify-center p-4">
+            <div
+              className="fixed inset-0 bg-black/50 transition-opacity"
+              onClick={() => !isPermanentlyDeleting && setIsPermanentDeleteModalOpen(false)}
+            />
+            <div className="relative bg-white dark:bg-slate-800 rounded-lg shadow-xl max-w-md w-full p-6">
+              <div className="flex items-center gap-4 mb-4">
+                <div className="flex-shrink-0 w-12 h-12 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center">
+                  <AlertTriangle className="h-6 w-6 text-red-600 dark:text-red-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
+                    Permanently delete {selectedClients.size} client{selectedClients.size > 1 ? 's' : ''}?
+                  </h3>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    This action is irreversible
+                  </p>
+                </div>
+              </div>
+              <p className="text-sm text-slate-600 dark:text-slate-300 mb-6">
+                Are you sure you want to <strong className="text-red-600 dark:text-red-400">permanently delete</strong> the selected client{selectedClients.size > 1 ? 's' : ''}?
+                This will remove all associated data and <strong>cannot be undone</strong>. The client{selectedClients.size > 1 ? 's' : ''} will not be recoverable.
+              </p>
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setIsPermanentDeleteModalOpen(false)}
+                  disabled={isPermanentlyDeleting}
+                  className="btn-outline"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handlePermanentDelete}
+                  disabled={isPermanentlyDeleting}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center"
+                >
+                  {isPermanentlyDeleting ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Deleting forever...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete Permanently
                     </>
                   )}
                 </button>

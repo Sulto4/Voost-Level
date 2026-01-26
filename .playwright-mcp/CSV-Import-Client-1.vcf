@@ -1,0 +1,11 @@
+BEGIN:VCARD
+VERSION:3.0
+FN:CSV Import Client 1
+N:1;CSV Import Client;;;
+ORG:CSV Company Alpha
+EMAIL;TYPE=WORK:csvtest1@example.com
+TEL;TYPE=WORK:+1-555-1001
+URL:https://company-alpha.com
+NOTE:First test import
+REV:2026-01-26T21:18:05.711Z
+END:VCARD

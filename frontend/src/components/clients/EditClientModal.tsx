@@ -1,8 +1,15 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
+import { Plus, X } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { LoadingSpinner } from '../ui/LoadingSpinner'
+import { ConfirmDialog } from '../ui/ConfirmDialog'
 import { supabase } from '../../lib/supabase'
 import type { Client, ClientStatus } from '../../types/database'
+
+interface CustomField {
+  key: string
+  value: string
+}
 
 interface EditClientModalProps {
   isOpen: boolean
@@ -21,10 +28,53 @@ export function EditClientModal({ isOpen, onClose, client, onClientUpdated }: Ed
   const [value, setValue] = useState('')
   const [source, setSource] = useState('')
   const [notes, setNotes] = useState('')
+  const [customFields, setCustomFields] = useState<CustomField[]>([])
 
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
+  const [showUnsavedWarning, setShowUnsavedWarning] = useState(false)
+
+  // Track original values to detect changes
+  const originalValues = useMemo(() => {
+    if (!client) return null
+    return {
+      name: client.name || '',
+      company: client.company || '',
+      email: client.email || '',
+      phone: client.phone || '',
+      website: client.website || '',
+      status: client.status,
+      value: client.value?.toString() || '',
+      source: client.source || '',
+      notes: client.notes || '',
+      customFields: client.custom_fields && typeof client.custom_fields === 'object'
+        ? Object.entries(client.custom_fields as Record<string, string>).map(
+            ([key, value]) => ({ key, value: String(value) })
+          )
+        : [],
+    }
+  }, [client])
+
+  // Check if form has unsaved changes
+  const isDirty = useMemo(() => {
+    if (!originalValues) return false
+    if (name !== originalValues.name) return true
+    if (company !== originalValues.company) return true
+    if (email !== originalValues.email) return true
+    if (phone !== originalValues.phone) return true
+    if (website !== originalValues.website) return true
+    if (status !== originalValues.status) return true
+    if (value !== originalValues.value) return true
+    if (source !== originalValues.source) return true
+    if (notes !== originalValues.notes) return true
+    if (customFields.length !== originalValues.customFields.length) return true
+    for (let i = 0; i < customFields.length; i++) {
+      if (customFields[i].key !== originalValues.customFields[i]?.key) return true
+      if (customFields[i].value !== originalValues.customFields[i]?.value) return true
+    }
+    return false
+  }, [name, company, email, phone, website, status, value, source, notes, customFields, originalValues])
 
   // Populate form when client changes
   useEffect(() => {
@@ -38,8 +88,32 @@ export function EditClientModal({ isOpen, onClose, client, onClientUpdated }: Ed
       setValue(client.value?.toString() || '')
       setSource(client.source || '')
       setNotes(client.notes || '')
+
+      // Parse custom fields from JSONB
+      if (client.custom_fields && typeof client.custom_fields === 'object') {
+        const fields = Object.entries(client.custom_fields as Record<string, string>).map(
+          ([key, value]) => ({ key, value: String(value) })
+        )
+        setCustomFields(fields.length > 0 ? fields : [])
+      } else {
+        setCustomFields([])
+      }
     }
   }, [client])
+
+  function addCustomField() {
+    setCustomFields([...customFields, { key: '', value: '' }])
+  }
+
+  function removeCustomField(index: number) {
+    setCustomFields(customFields.filter((_, i) => i !== index))
+  }
+
+  function updateCustomField(index: number, field: 'key' | 'value', value: string) {
+    const updated = [...customFields]
+    updated[index][field] = value
+    setCustomFields(updated)
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -58,6 +132,14 @@ export function EditClientModal({ isOpen, onClose, client, onClientUpdated }: Ed
 
     setLoading(true)
 
+    // Convert custom fields array to object
+    const customFieldsObj: Record<string, string> = {}
+    customFields.forEach(({ key, value }) => {
+      if (key.trim()) {
+        customFieldsObj[key.trim()] = value.trim()
+      }
+    })
+
     const { error: updateError } = await supabase
       .from('clients')
       .update({
@@ -70,6 +152,7 @@ export function EditClientModal({ isOpen, onClose, client, onClientUpdated }: Ed
         value: value ? parseFloat(value) : null,
         source: source.trim() || null,
         notes: notes.trim() || null,
+        custom_fields: Object.keys(customFieldsObj).length > 0 ? customFieldsObj : null,
         updated_at: new Date().toISOString(),
       })
       .eq('id', client.id)
@@ -91,11 +174,30 @@ export function EditClientModal({ isOpen, onClose, client, onClientUpdated }: Ed
   function handleClose() {
     setError('')
     setSuccess(false)
+    setShowUnsavedWarning(false)
     onClose()
   }
 
+  function attemptClose() {
+    if (isDirty && !success) {
+      setShowUnsavedWarning(true)
+    } else {
+      handleClose()
+    }
+  }
+
+  function confirmClose() {
+    setShowUnsavedWarning(false)
+    handleClose()
+  }
+
+  function cancelClose() {
+    setShowUnsavedWarning(false)
+  }
+
   return (
-    <Modal isOpen={isOpen} onClose={handleClose} title="Edit Client" size="lg">
+    <>
+    <Modal isOpen={isOpen} onClose={attemptClose} title="Edit Client" size="lg">
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && (
           <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-500 dark:text-red-400 text-sm">
@@ -249,12 +351,66 @@ export function EditClientModal({ isOpen, onClose, client, onClientUpdated }: Ed
               disabled={success}
             />
           </div>
+
+          {/* Custom Fields Section */}
+          <div className="md:col-span-2 border-t border-slate-200 dark:border-slate-700 pt-4">
+            <div className="flex items-center justify-between mb-3">
+              <label className="label mb-0">Custom Fields</label>
+              <button
+                type="button"
+                onClick={addCustomField}
+                className="text-sm text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300 flex items-center gap-1"
+                disabled={success}
+              >
+                <Plus className="h-4 w-4" />
+                Add Field
+              </button>
+            </div>
+
+            {customFields.length === 0 ? (
+              <p className="text-sm text-slate-500 dark:text-slate-400 italic">
+                No custom fields. Click "Add Field" to create one.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {customFields.map((field, index) => (
+                  <div key={index} className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={field.key}
+                      onChange={(e) => updateCustomField(index, 'key', e.target.value)}
+                      className="input flex-1"
+                      placeholder="Field name (e.g., Industry)"
+                      disabled={success}
+                    />
+                    <input
+                      type="text"
+                      value={field.value}
+                      onChange={(e) => updateCustomField(index, 'value', e.target.value)}
+                      className="input flex-1"
+                      placeholder="Value (e.g., Technology)"
+                      disabled={success}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeCustomField(index)}
+                      className="p-2 text-slate-400 hover:text-red-500 dark:text-slate-500 dark:hover:text-red-400"
+                      disabled={success}
+                      aria-label="Remove custom field"
+                    >
+                      <X className="h-5 w-5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="flex justify-end gap-3 pt-4">
           <button
             type="button"
-            onClick={handleClose}
+            onClick={attemptClose}
             className="btn-outline"
             disabled={loading}
           >
@@ -270,5 +426,17 @@ export function EditClientModal({ isOpen, onClose, client, onClientUpdated }: Ed
         </div>
       </form>
     </Modal>
+
+    <ConfirmDialog
+      isOpen={showUnsavedWarning}
+      onClose={cancelClose}
+      onConfirm={confirmClose}
+      title="Unsaved Changes"
+      message="You have unsaved changes. Are you sure you want to close? Your changes will be lost."
+      confirmText="Leave"
+      cancelText="Stay"
+      variant="warning"
+    />
+    </>
   )
 }

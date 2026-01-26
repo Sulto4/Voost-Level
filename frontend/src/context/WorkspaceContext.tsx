@@ -12,6 +12,8 @@ export interface PendingInvitation {
   email: string
   role: WorkspaceRole
   invitedAt: string
+  token: string
+  expiresAt: string
 }
 
 interface WorkspaceContextType {
@@ -27,7 +29,7 @@ interface WorkspaceContextType {
   inviteMember: (email: string, role: WorkspaceRole) => Promise<{ error: Error | null }>
   removeMember: (memberId: string) => Promise<{ error: Error | null }>
   updateMemberRole: (memberId: string, role: WorkspaceRole) => Promise<{ error: Error | null }>
-  cancelInvitation: (invitationId: string) => void
+  cancelInvitation: (invitationId: string) => Promise<void>
   refreshWorkspaces: () => Promise<void>
 }
 
@@ -38,11 +40,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [workspaces, setWorkspaces] = useState<WorkspaceWithRole[]>([])
   const [currentWorkspace, setCurrentWorkspace] = useState<WorkspaceWithRole | null>(null)
   const [loading, setLoading] = useState(true)
-  const [pendingInvitations, setPendingInvitations] = useState<PendingInvitation[]>(() => {
-    // Load from localStorage
-    const stored = localStorage.getItem('pendingInvitations')
-    return stored ? JSON.parse(stored) : []
-  })
+  const [pendingInvitations, setPendingInvitations] = useState<PendingInvitation[]>([])
 
   useEffect(() => {
     // Wait for auth to finish loading before determining workspace state
@@ -56,9 +54,19 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     } else {
       setWorkspaces([])
       setCurrentWorkspace(null)
+      setPendingInvitations([])
       setLoading(false)
     }
   }, [user, authLoading])
+
+  // Fetch pending invitations when current workspace changes
+  useEffect(() => {
+    if (currentWorkspace) {
+      fetchPendingInvitations()
+    } else {
+      setPendingInvitations([])
+    }
+  }, [currentWorkspace?.id])
 
   async function fetchWorkspaces() {
     if (!user) return
@@ -107,6 +115,34 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       setCurrentWorkspace(workspace)
       localStorage.setItem('currentWorkspaceId', workspaceId)
     }
+  }
+
+  async function fetchPendingInvitations() {
+    if (!currentWorkspace) return
+
+    const { data, error } = await supabase
+      .from('workspace_invitations')
+      .select('*')
+      .eq('workspace_id', currentWorkspace.id)
+      .is('accepted_at', null)
+      .gt('expires_at', new Date().toISOString())
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      console.error('Error fetching invitations:', error)
+      return
+    }
+
+    const invitations: PendingInvitation[] = (data || []).map((inv) => ({
+      id: inv.id,
+      email: inv.email,
+      role: inv.role,
+      invitedAt: inv.created_at,
+      token: inv.token,
+      expiresAt: inv.expires_at,
+    }))
+
+    setPendingInvitations(invitations)
   }
 
   async function createWorkspace(name: string, slug: string) {
@@ -173,36 +209,87 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       return { error: new Error('No workspace selected') }
     }
 
-    // Check if already invited
-    const existingInvitation = pendingInvitations.find(
-      (inv) => inv.email.toLowerCase() === email.toLowerCase()
-    )
+    // Check if already invited (in database)
+    const { data: existingInvitation } = await supabase
+      .from('workspace_invitations')
+      .select('id')
+      .eq('workspace_id', currentWorkspace.id)
+      .eq('email', email.toLowerCase())
+      .is('accepted_at', null)
+      .gt('expires_at', new Date().toISOString())
+      .single()
+
     if (existingInvitation) {
       return { error: new Error('This email has already been invited') }
     }
 
-    // Create a pending invitation (stored in localStorage for demo)
-    const newInvitation: PendingInvitation = {
-      id: crypto.randomUUID(),
-      email: email.toLowerCase(),
-      role,
-      invitedAt: new Date().toISOString(),
+    // Check if already a member
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('email', email.toLowerCase())
+      .single()
+
+    if (profiles) {
+      const { data: existingMember } = await supabase
+        .from('workspace_members')
+        .select('id')
+        .eq('workspace_id', currentWorkspace.id)
+        .eq('user_id', profiles.id)
+        .single()
+
+      if (existingMember) {
+        return { error: new Error('This user is already a member of this workspace') }
+      }
     }
 
-    const updatedInvitations = [...pendingInvitations, newInvitation]
-    setPendingInvitations(updatedInvitations)
-    localStorage.setItem('pendingInvitations', JSON.stringify(updatedInvitations))
+    // Generate a unique token
+    const token = crypto.randomUUID()
 
-    // In production, this would send an email invitation via Supabase Edge Function
-    console.log(`[Demo] Invitation email would be sent to: ${email}`)
+    // Set expiry to 7 days from now
+    const expiresAt = new Date()
+    expiresAt.setDate(expiresAt.getDate() + 7)
+
+    // Create invitation in database
+    const { error: insertError } = await supabase
+      .from('workspace_invitations')
+      .insert({
+        workspace_id: currentWorkspace.id,
+        email: email.toLowerCase(),
+        role,
+        token,
+        invited_by: user.id,
+        expires_at: expiresAt.toISOString(),
+      })
+
+    if (insertError) {
+      console.error('Error creating invitation:', insertError)
+      return { error: new Error('Failed to create invitation') }
+    }
+
+    // Refresh invitations list
+    await fetchPendingInvitations()
+
+    // Log the invitation link (in production, this would send an email)
+    const inviteLink = `${window.location.origin}/invite/${token}`
+    console.log(`[Demo] Invitation link for ${email}: ${inviteLink}`)
 
     return { error: null }
   }
 
-  function cancelInvitation(invitationId: string) {
-    const updatedInvitations = pendingInvitations.filter((inv) => inv.id !== invitationId)
-    setPendingInvitations(updatedInvitations)
-    localStorage.setItem('pendingInvitations', JSON.stringify(updatedInvitations))
+  async function cancelInvitation(invitationId: string) {
+    const { error } = await supabase
+      .from('workspace_invitations')
+      .delete()
+      .eq('id', invitationId)
+
+    if (error) {
+      console.error('Error cancelling invitation:', error)
+      return
+    }
+
+    // Refresh invitations list
+    await fetchPendingInvitations()
   }
 
   async function removeMember(memberId: string) {

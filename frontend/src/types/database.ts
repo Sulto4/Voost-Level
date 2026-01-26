@@ -114,6 +114,7 @@ export type Database = {
           created_by: string
           created_at: string
           updated_at: string
+          deleted_at: string | null
         }
         Insert: {
           id?: string
@@ -132,6 +133,7 @@ export type Database = {
           created_by: string
           created_at?: string
           updated_at?: string
+          deleted_at?: string | null
         }
         Update: {
           id?: string
@@ -150,39 +152,46 @@ export type Database = {
           created_by?: string
           created_at?: string
           updated_at?: string
+          deleted_at?: string | null
         }
       }
       client_contacts: {
         Row: {
           id: string
           client_id: string
+          workspace_id: string
           name: string
           email: string | null
           phone: string | null
           role: string | null
           is_primary: boolean
+          notes: string | null
           created_at: string
           updated_at: string
         }
         Insert: {
           id?: string
           client_id: string
+          workspace_id: string
           name: string
           email?: string | null
           phone?: string | null
           role?: string | null
           is_primary?: boolean
+          notes?: string | null
           created_at?: string
           updated_at?: string
         }
         Update: {
           id?: string
           client_id?: string
+          workspace_id?: string
           name?: string
           email?: string | null
           phone?: string | null
           role?: string | null
           is_primary?: boolean
+          notes?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -232,36 +241,42 @@ export type Database = {
         Row: {
           id: string
           project_id: string
+          parent_id: string | null
           title: string
           description: string | null
           status: 'todo' | 'in_progress' | 'done'
           priority: 'low' | 'medium' | 'high'
           assigned_to: string | null
           due_date: string | null
+          sort_order: number | null
           created_at: string
           updated_at: string
         }
         Insert: {
           id?: string
           project_id: string
+          parent_id?: string | null
           title: string
           description?: string | null
           status?: 'todo' | 'in_progress' | 'done'
           priority?: 'low' | 'medium' | 'high'
           assigned_to?: string | null
           due_date?: string | null
+          sort_order?: number | null
           created_at?: string
           updated_at?: string
         }
         Update: {
           id?: string
           project_id?: string
+          parent_id?: string | null
           title?: string
           description?: string | null
           status?: 'todo' | 'in_progress' | 'done'
           priority?: 'low' | 'medium' | 'high'
           assigned_to?: string | null
           due_date?: string | null
+          sort_order?: number | null
           created_at?: string
           updated_at?: string
         }

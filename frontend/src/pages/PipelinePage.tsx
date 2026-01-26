@@ -4,6 +4,7 @@ import { Plus, Settings, DollarSign, Trophy, XCircle } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useWorkspace } from '../context/WorkspaceContext'
 import { useAuth } from '../context/AuthContext'
+import { EditStagesModal } from '../components/pipeline/EditStagesModal'
 import type { Client, PipelineStage, ClientStatus } from '../types/database'
 
 interface StageWithClients extends PipelineStage {
@@ -28,6 +29,7 @@ export function PipelinePage() {
   const [draggedClient, setDraggedClient] = useState<Client | null>(null)
   const [dragOverStage, setDragOverStage] = useState<string | null>(null)
   const [winLossStats, setWinLossStats] = useState({ won: 0, lost: 0, wonValue: 0, lostValue: 0 })
+  const [showEditStagesModal, setShowEditStagesModal] = useState(false)
 
   useEffect(() => {
     if (currentWorkspace) {
@@ -257,7 +259,10 @@ export function PipelinePage() {
           </p>
         </div>
         <div className="flex items-center space-x-2">
-          <button className="btn-outline">
+          <button
+            className="btn-outline"
+            onClick={() => setShowEditStagesModal(true)}
+          >
             <Settings className="h-5 w-5 mr-2" />
             Edit Stages
           </button>
@@ -386,6 +391,13 @@ export function PipelinePage() {
           </div>
         ))}
       </div>
+
+      {/* Edit Stages Modal */}
+      <EditStagesModal
+        isOpen={showEditStagesModal}
+        onClose={() => setShowEditStagesModal(false)}
+        onStagesUpdated={fetchPipelineData}
+      />
     </div>
   )
 }

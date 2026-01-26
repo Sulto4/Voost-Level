@@ -1,9 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Modal } from '../ui/Modal'
 import { LoadingSpinner } from '../ui/LoadingSpinner'
+import { RichTextEditor, type TeamMember } from '../ui/RichTextEditor'
 import { Phone, Mail, MessageSquare, Users, CheckSquare } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../context/AuthContext'
+import { useWorkspace } from '../../context/WorkspaceContext'
 import type { ActivityType } from '../../types/database'
 
 interface LogActivityModalProps {
@@ -24,15 +26,56 @@ const activityTypes: { type: ActivityType; label: string; icon: React.ComponentT
 
 export function LogActivityModal({ isOpen, onClose, clientId, onActivityLogged, defaultType = 'call' }: LogActivityModalProps) {
   const { user } = useAuth()
+  const { currentWorkspace } = useWorkspace()
 
   const [activityType, setActivityType] = useState<ActivityType>(defaultType)
   const [content, setContent] = useState('')
   const [duration, setDuration] = useState('')
   const [outcome, setOutcome] = useState('')
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
 
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
+
+  // Fetch team members for @mentions
+  useEffect(() => {
+    async function fetchTeamMembers() {
+      if (!currentWorkspace) return
+
+      const { data, error } = await supabase
+        .from('workspace_members')
+        .select(`
+          user_id,
+          profiles:user_id(
+            id,
+            full_name,
+            email,
+            avatar_url
+          )
+        `)
+        .eq('workspace_id', currentWorkspace.id)
+
+      if (!error && data) {
+        const members: TeamMember[] = data
+          .filter(m => m.profiles)
+          .map(m => {
+            const profile = m.profiles as unknown as { id: string; full_name: string | null; email: string | null; avatar_url: string | null }
+            return {
+              id: profile.id,
+              name: profile.full_name || profile.email || 'Unknown',
+              email: profile.email || undefined,
+              avatar: profile.avatar_url || undefined,
+            }
+          })
+        setTeamMembers(members)
+      }
+    }
+
+    if (isOpen) {
+      fetchTeamMembers()
+    }
+  }, [currentWorkspace, isOpen])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -175,16 +218,19 @@ export function LogActivityModal({ isOpen, onClose, clientId, onActivityLogged, 
           </div>
         )}
 
-        {/* Notes/Content */}
+        {/* Notes/Content with Rich Text Editor and @mentions */}
         <div>
           <label htmlFor="content" className="label">
             {activityType === 'note' ? 'Note' : 'Notes'} *
+            {teamMembers.length > 0 && (
+              <span className="text-xs text-slate-400 dark:text-slate-500 ml-2">
+                Type @ to mention team members
+              </span>
+            )}
           </label>
-          <textarea
-            id="content"
+          <RichTextEditor
             value={content}
-            onChange={(e) => setContent(e.target.value)}
-            className="input min-h-[120px]"
+            onChange={setContent}
             placeholder={
               activityType === 'call' ? 'What did you discuss on the call?' :
               activityType === 'email' ? 'Summary of the email...' :
@@ -193,6 +239,8 @@ export function LogActivityModal({ isOpen, onClose, clientId, onActivityLogged, 
               'Add your note here...'
             }
             disabled={success}
+            minHeight="120px"
+            teamMembers={teamMembers}
           />
         </div>
 

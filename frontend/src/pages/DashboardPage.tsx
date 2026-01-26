@@ -1,9 +1,15 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { Users, FolderKanban, DollarSign, TrendingUp } from 'lucide-react'
+import { Users, FolderKanban, DollarSign, TrendingUp, MessageSquare, Phone, Mail, Calendar, CheckSquare, ArrowRightLeft } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useWorkspace } from '../context/WorkspaceContext'
 import { StatCardSkeleton, CardSkeleton } from '../components/ui/Skeleton'
+import type { Activity, Client, Profile } from '../types/database'
+
+interface ActivityWithDetails extends Activity {
+  client?: Client | null
+  user?: Profile | null
+}
 
 export function DashboardPage() {
   const { currentWorkspace } = useWorkspace()
@@ -14,6 +20,7 @@ export function DashboardPage() {
     pipelineValue: 0,
     winRate: 0,
   })
+  const [recentActivities, setRecentActivities] = useState<ActivityWithDetails[]>([])
 
   useEffect(() => {
     if (currentWorkspace) {
@@ -68,6 +75,39 @@ export function DashboardPage() {
       winRate,
     })
 
+    // Fetch recent activities for clients in this workspace
+    if (clients.length > 0) {
+      const clientIds = clients.map(c => c.id)
+      const { data: activitiesData, error: activitiesError } = await supabase
+        .from('activities')
+        .select('*')
+        .in('client_id', clientIds)
+        .order('created_at', { ascending: false })
+        .limit(10)
+
+      if (activitiesError) {
+        console.error('Error fetching activities:', activitiesError)
+      } else if (activitiesData && activitiesData.length > 0) {
+        // Fetch user profiles for activities
+        const userIds = [...new Set(activitiesData.map(a => a.user_id))]
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('*')
+          .in('id', userIds)
+
+        // Map activities with client and user details
+        const activitiesWithDetails: ActivityWithDetails[] = activitiesData.map(activity => ({
+          ...activity,
+          client: clients.find(c => c.id === activity.client_id) || null,
+          user: profiles?.find(p => p.id === activity.user_id) || null,
+        }))
+
+        setRecentActivities(activitiesWithDetails)
+      }
+    } else {
+      setRecentActivities([])
+    }
+
     setLoading(false)
   }
 
@@ -77,6 +117,84 @@ export function DashboardPage() {
     { name: 'Pipeline Value', value: `$${stats.pipelineValue.toLocaleString()}`, icon: DollarSign, change: '+0%' },
     { name: 'Win Rate', value: `${stats.winRate}%`, icon: TrendingUp, change: '+0%' },
   ]
+
+  function getActivityIcon(type: Activity['type']) {
+    switch (type) {
+      case 'note':
+        return <MessageSquare className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+      case 'call':
+        return <Phone className="h-4 w-4 text-green-600 dark:text-green-400" />
+      case 'email':
+        return <Mail className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+      case 'meeting':
+        return <Calendar className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+      case 'task':
+        return <CheckSquare className="h-4 w-4 text-teal-600 dark:text-teal-400" />
+      case 'status_change':
+        return <ArrowRightLeft className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+      default:
+        return <MessageSquare className="h-4 w-4 text-slate-600 dark:text-slate-400" />
+    }
+  }
+
+  function getActivityIconBg(type: Activity['type']) {
+    switch (type) {
+      case 'note':
+        return 'bg-blue-100 dark:bg-blue-900/30'
+      case 'call':
+        return 'bg-green-100 dark:bg-green-900/30'
+      case 'email':
+        return 'bg-purple-100 dark:bg-purple-900/30'
+      case 'meeting':
+        return 'bg-orange-100 dark:bg-orange-900/30'
+      case 'task':
+        return 'bg-teal-100 dark:bg-teal-900/30'
+      case 'status_change':
+        return 'bg-indigo-100 dark:bg-indigo-900/30'
+      default:
+        return 'bg-slate-100 dark:bg-slate-800'
+    }
+  }
+
+  function getActivityDescription(activity: ActivityWithDetails) {
+    switch (activity.type) {
+      case 'note':
+        return `added a note${activity.content ? `: "${activity.content.substring(0, 50)}${activity.content.length > 50 ? '...' : ''}"` : ''}`
+      case 'call':
+        return 'logged a call'
+      case 'email':
+        return 'sent an email'
+      case 'meeting':
+        return 'scheduled a meeting'
+      case 'task':
+        return activity.content || 'created a task'
+      case 'status_change':
+        return activity.content || 'changed status'
+      default:
+        return activity.content || 'performed an action'
+    }
+  }
+
+  function formatRelativeTime(dateString: string) {
+    const date = new Date(dateString)
+    const now = new Date()
+    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000)
+
+    if (diffInSeconds < 60) {
+      return 'Just now'
+    } else if (diffInSeconds < 3600) {
+      const minutes = Math.floor(diffInSeconds / 60)
+      return `${minutes} minute${minutes === 1 ? '' : 's'} ago`
+    } else if (diffInSeconds < 86400) {
+      const hours = Math.floor(diffInSeconds / 3600)
+      return `${hours} hour${hours === 1 ? '' : 's'} ago`
+    } else if (diffInSeconds < 604800) {
+      const days = Math.floor(diffInSeconds / 86400)
+      return `${days} day${days === 1 ? '' : 's'} ago`
+    } else {
+      return date.toLocaleDateString()
+    }
+  }
 
   if (loading) {
     return (
@@ -147,12 +265,44 @@ export function DashboardPage() {
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">
             Recent Activity
           </h2>
-          <div className="text-center py-8 text-slate-500 dark:text-slate-400">
-            <p>No recent activity</p>
-            <p className="text-sm mt-1">
-              Activity will appear here as you interact with clients
-            </p>
-          </div>
+          {recentActivities.length === 0 ? (
+            <div className="text-center py-8 text-slate-500 dark:text-slate-400">
+              <p>No recent activity</p>
+              <p className="text-sm mt-1">
+                Activity will appear here as you interact with clients
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4 max-h-[400px] overflow-y-auto">
+              {recentActivities.map((activity) => (
+                <div key={activity.id} className="flex items-start gap-3 pb-3 border-b border-slate-100 dark:border-slate-700 last:border-0">
+                  <div className={`p-2 rounded-lg flex-shrink-0 ${getActivityIconBg(activity.type)}`}>
+                    {getActivityIcon(activity.type)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-slate-900 dark:text-white">
+                      <span className="font-medium">{activity.user?.full_name || 'User'}</span>
+                      {' '}
+                      <span className="text-slate-500 dark:text-slate-400">
+                        {getActivityDescription(activity)}
+                      </span>
+                    </p>
+                    {activity.client && (
+                      <Link
+                        to={`/clients/${activity.client.id}`}
+                        className="text-sm text-primary-600 dark:text-primary-400 hover:underline"
+                      >
+                        {activity.client.name}
+                      </Link>
+                    )}
+                    <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+                      {formatRelativeTime(activity.created_at)}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Pipeline Overview */}

@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import { Modal } from '../ui/Modal'
 import { LoadingSpinner } from '../ui/LoadingSpinner'
 import { supabase } from '../../lib/supabase'
-import type { Task, TaskStatus, TaskPriority } from '../../types/database'
+import { useWorkspace } from '../../context/WorkspaceContext'
+import type { Task, TaskStatus, TaskPriority, Profile } from '../../types/database'
 
 interface EditTaskModalProps {
   isOpen: boolean
@@ -12,15 +13,46 @@ interface EditTaskModalProps {
 }
 
 export function EditTaskModal({ isOpen, onClose, task, onTaskUpdated }: EditTaskModalProps) {
+  const { currentWorkspace } = useWorkspace()
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [status, setStatus] = useState<TaskStatus>('todo')
   const [priority, setPriority] = useState<TaskPriority>('medium')
   const [dueDate, setDueDate] = useState('')
+  const [assignedTo, setAssignedTo] = useState<string>('')
+  const [teamMembers, setTeamMembers] = useState<Profile[]>([])
 
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
+
+  // Fetch team members for assignee dropdown
+  useEffect(() => {
+    async function fetchTeamMembers() {
+      if (!currentWorkspace) return
+
+      const { data: members } = await supabase
+        .from('workspace_members')
+        .select('user_id')
+        .eq('workspace_id', currentWorkspace.id)
+
+      if (members && members.length > 0) {
+        const userIds = members.map(m => m.user_id)
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('*')
+          .in('id', userIds)
+
+        if (profiles) {
+          setTeamMembers(profiles)
+        }
+      }
+    }
+
+    if (isOpen) {
+      fetchTeamMembers()
+    }
+  }, [currentWorkspace, isOpen])
 
   // Populate form when task changes
   useEffect(() => {
@@ -30,6 +62,7 @@ export function EditTaskModal({ isOpen, onClose, task, onTaskUpdated }: EditTask
       setStatus(task.status || 'todo')
       setPriority(task.priority || 'medium')
       setDueDate(task.due_date || '')
+      setAssignedTo(task.assigned_to || '')
     }
   }, [task])
 
@@ -58,6 +91,7 @@ export function EditTaskModal({ isOpen, onClose, task, onTaskUpdated }: EditTask
         status,
         priority,
         due_date: dueDate || null,
+        assigned_to: assignedTo || null,
         updated_at: new Date().toISOString(),
       })
       .eq('id', task.id)
@@ -174,6 +208,26 @@ export function EditTaskModal({ isOpen, onClose, task, onTaskUpdated }: EditTask
               className="input"
               disabled={success}
             />
+          </div>
+
+          <div>
+            <label htmlFor="assignee" className="label">
+              Assignee
+            </label>
+            <select
+              id="assignee"
+              value={assignedTo}
+              onChange={(e) => setAssignedTo(e.target.value)}
+              className="input"
+              disabled={success}
+            >
+              <option value="">Unassigned</option>
+              {teamMembers.map((member) => (
+                <option key={member.id} value={member.id}>
+                  {member.full_name || member.email}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 

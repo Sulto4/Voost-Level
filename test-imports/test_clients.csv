@@ -1,0 +1,4 @@
+Name,Company,Email,Phone,Status,Value,Source,Website,Notes
+CSV Import Client 1,CSV Company Alpha,csvtest1@example.com,+1-555-1001,lead,5000,Website,https://company-alpha.com,First test import
+CSV Import Client 2,CSV Company Beta,csvtest2@example.com,+1-555-1002,active,7500,Referral,https://company-beta.com,Second test import
+CSV Import Client 3,CSV Company Gamma,csvtest3@example.com,+1-555-1003,inactive,3000,LinkedIn,,Third test import with no website

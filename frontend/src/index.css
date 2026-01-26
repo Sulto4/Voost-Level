@@ -116,6 +116,144 @@
   }
 }
 
+/* Print Styles */
+@media print {
+  /* Hide navigation, sidebar, and header */
+  aside,
+  nav,
+  header,
+  .no-print,
+  [role="complementary"],
+  [role="banner"] {
+    display: none !important;
+  }
+
+  /* Make main content full width */
+  main {
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  /* Remove dark mode for print */
+  html,
+  body,
+  .dark,
+  .dark body {
+    background: white !important;
+    color: black !important;
+  }
+
+  /* Force all containers to have white background */
+  div,
+  section,
+  article {
+    background-color: white !important;
+  }
+
+  /* Style cards for print */
+  .card {
+    border: 1px solid #e2e8f0 !important;
+    box-shadow: none !important;
+    break-inside: avoid;
+    background: white !important;
+  }
+
+  /* Make text readable in print */
+  * {
+    color: black !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Hide interactive elements */
+  button:not(.print-show),
+  .btn,
+  .icon-btn,
+  input[type="checkbox"],
+  input[type="search"],
+  .modal,
+  .toast {
+    display: none !important;
+  }
+
+  /* Style badges for print */
+  .badge {
+    border: 1px solid currentColor;
+    background: transparent !important;
+  }
+
+  /* Adjust table styles for print */
+  table {
+    width: 100% !important;
+    border-collapse: collapse;
+  }
+
+  th,
+  td {
+    border: 1px solid #e2e8f0 !important;
+    padding: 8px !important;
+    background: white !important;
+  }
+
+  th {
+    background: #f1f5f9 !important;
+    font-weight: 600 !important;
+  }
+
+  /* Page breaks */
+  h1, h2, h3 {
+    break-after: avoid;
+  }
+
+  /* Links - show URL in brackets */
+  a[href]:after {
+    content: " (" attr(href) ")";
+    font-size: 0.8em;
+    color: #666 !important;
+  }
+
+  /* Don't show URL for internal links */
+  a[href^="/"]:after,
+  a[href^="#"]:after {
+    content: "";
+  }
+
+  /* Print header for client details */
+  .print-header {
+    display: block !important;
+    text-align: center;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #e2e8f0;
+  }
+
+  /* Adjust spacing */
+  .space-y-6 > * + * {
+    margin-top: 1rem !important;
+  }
+
+  .space-y-4 > * + * {
+    margin-top: 0.75rem !important;
+  }
+
+  /* Hide scrollbars in print */
+  ::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Utility class to force hide in print */
+.no-print {
+  /* This class is used to hide elements in print via the @media print rule above */
+}
+
+/* Utility class to force show in print (override default hiding) */
+.print-show {
+  /* This class overrides the button hiding in print */
+}
+
 /* Utility classes */
 @layer utilities {
   .text-balance {

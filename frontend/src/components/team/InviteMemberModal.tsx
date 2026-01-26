@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Copy, Check } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import { LoadingSpinner } from '../ui/LoadingSpinner'
@@ -16,7 +17,9 @@ export function InviteMemberModal({ isOpen, onClose, onInviteSent }: InviteMembe
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
-  const { inviteMember } = useWorkspace()
+  const [inviteLink, setInviteLink] = useState('')
+  const [copied, setCopied] = useState(false)
+  const { inviteMember, pendingInvitations } = useWorkspace()
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -45,10 +48,26 @@ export function InviteMemberModal({ isOpen, onClose, onInviteSent }: InviteMembe
       setSuccess(true)
       setLoading(false)
       onInviteSent?.()
-      // Auto-close after success
+      // Find the newly created invitation to get the link
+      // We need to wait a bit for the state to update
       setTimeout(() => {
-        handleClose()
-      }, 2000)
+        const newInvitation = pendingInvitations.find(
+          (inv) => inv.email.toLowerCase() === email.trim().toLowerCase()
+        )
+        if (newInvitation?.token) {
+          setInviteLink(`${window.location.origin}/invite/${newInvitation.token}`)
+        }
+      }, 500)
+    }
+  }
+
+  async function copyInviteLink() {
+    try {
+      await navigator.clipboard.writeText(inviteLink)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch (err) {
+      console.error('Failed to copy:', err)
     }
   }
 
@@ -57,6 +76,8 @@ export function InviteMemberModal({ isOpen, onClose, onInviteSent }: InviteMembe
     setRole('member')
     setError('')
     setSuccess(false)
+    setInviteLink('')
+    setCopied(false)
     onClose()
   }
 
@@ -71,7 +92,34 @@ export function InviteMemberModal({ isOpen, onClose, onInviteSent }: InviteMembe
 
         {success && (
           <div className="p-3 bg-secondary-50 dark:bg-secondary-900/20 border border-secondary-200 dark:border-secondary-800 rounded-lg text-secondary dark:text-secondary-400 text-sm">
-            Invitation sent successfully!
+            <p className="font-medium mb-2">Invitation created successfully!</p>
+            {inviteLink && (
+              <div className="mt-2">
+                <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">
+                  Share this invitation link:
+                </p>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={inviteLink}
+                    readOnly
+                    className="input text-xs flex-1"
+                  />
+                  <button
+                    type="button"
+                    onClick={copyInviteLink}
+                    className="btn-outline p-2"
+                    title="Copy link"
+                  >
+                    {copied ? (
+                      <Check className="h-4 w-4 text-green-500" />
+                    ) : (
+                      <Copy className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
