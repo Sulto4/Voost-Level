@@ -197,7 +197,7 @@ export function ClientDetailPage() {
   const [projectsLoading, setProjectsLoading] = useState(false)
   const [isLogActivityModalOpen, setIsLogActivityModalOpen] = useState(false)
   const [defaultActivityType, setDefaultActivityType] = useState<ActivityType>('call')
-  const [activities, setActivities] = useState<Activity[]>([])
+  const [activities, setActivities] = useState<(Activity & { user?: { full_name: string | null; email: string } })[]>([])
   const [activitiesLoading, setActivitiesLoading] = useState(false)
   const [showContextModal, setShowContextModal] = useState(false)
   const [contextData, setContextData] = useState<AIContextExport | null>(null)
@@ -213,6 +213,7 @@ export function ClientDetailPage() {
   const [files, setFiles] = useState<(FileType & { uploader?: { full_name: string | null; email: string } })[]>([])
   const [filesLoading, setFilesLoading] = useState(false)
   const [activityTypeFilter, setActivityTypeFilter] = useState<ActivityType | null>(null)
+  const [activityUserFilter, setActivityUserFilter] = useState<string | null>(null)
   const [isActivityFilterDropdownOpen, setIsActivityFilterDropdownOpen] = useState(false)
   const activityFilterRef = useRef<HTMLDivElement>(null)
   const { currentWorkspace, currentRole } = useWorkspace()
@@ -267,7 +268,10 @@ export function ClientDetailPage() {
     setActivitiesLoading(true)
     const { data, error } = await supabase
       .from('activities')
-      .select('*')
+      .select(`
+        *,
+        user:profiles!user_id(full_name, email)
+      `)
       .eq('client_id', id)
       .order('created_at', { ascending: false })
 
@@ -399,11 +403,24 @@ export function ClientDetailPage() {
     { value: 'status_change', label: 'Status Changes' },
   ]
 
-  // Filter activities by type
+  // Get unique users from activities for filter dropdown
+  const activityUsers = Array.from(
+    new Map(
+      activities
+        .filter(a => a.user)
+        .map(a => [a.user_id, { id: a.user_id, name: a.user?.full_name || a.user?.email || 'Unknown' }])
+    ).values()
+  )
+
+  // Filter activities by type and user
   const filteredActivities = activities.filter(activity => {
-    if (!activityTypeFilter) return true
-    return activity.type === activityTypeFilter
+    if (activityTypeFilter && activity.type !== activityTypeFilter) return false
+    if (activityUserFilter && activity.user_id !== activityUserFilter) return false
+    return true
   })
+
+  // Count active filters
+  const activeFilterCount = (activityTypeFilter ? 1 : 0) + (activityUserFilter ? 1 : 0)
 
   // Close activity filter dropdown when clicking outside
   useEffect(() => {
@@ -959,28 +976,44 @@ export function ClientDetailPage() {
                 Activity Timeline
               </h2>
               <div className="flex gap-2 flex-wrap">
-                {/* Activity Type Filter */}
+                {/* Activity Filter */}
                 <div className="relative" ref={activityFilterRef}>
                   <button
                     onClick={() => setIsActivityFilterDropdownOpen(!isActivityFilterDropdownOpen)}
                     className={clsx(
                       'btn-outline flex items-center',
-                      activityTypeFilter && 'bg-primary-50 dark:bg-primary-900/20 border-primary-300 dark:border-primary-700'
+                      activeFilterCount > 0 && 'bg-primary-50 dark:bg-primary-900/20 border-primary-300 dark:border-primary-700'
                     )}
                   >
                     <Filter className="h-4 w-4 mr-2" />
                     Filter
-                    {activityTypeFilter && (
+                    {activeFilterCount > 0 && (
                       <span className="ml-2 h-5 w-5 flex items-center justify-center bg-primary-600 text-white text-xs rounded-full">
-                        1
+                        {activeFilterCount}
                       </span>
                     )}
                   </button>
 
                   {/* Filter Dropdown */}
                   {isActivityFilterDropdownOpen && (
-                    <div className="absolute right-0 top-full mt-2 w-56 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg z-50">
-                      <div className="p-3">
+                    <div className="absolute right-0 top-full mt-2 w-64 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg z-50 max-h-96 overflow-y-auto">
+                      {/* Clear All Filters */}
+                      {activeFilterCount > 0 && (
+                        <div className="p-3 border-b border-slate-200 dark:border-slate-700">
+                          <button
+                            onClick={() => {
+                              setActivityTypeFilter(null)
+                              setActivityUserFilter(null)
+                            }}
+                            className="text-sm text-primary-600 hover:text-primary-700 dark:text-primary-400"
+                          >
+                            Clear all filters
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Activity Type Section */}
+                      <div className="p-3 border-b border-slate-200 dark:border-slate-700">
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Activity Type</span>
                           {activityTypeFilter && (
@@ -998,7 +1031,6 @@ export function ClientDetailPage() {
                               key={option.value}
                               onClick={() => {
                                 setActivityTypeFilter(activityTypeFilter === option.value ? null : option.value)
-                                setIsActivityFilterDropdownOpen(false)
                               }}
                               className={clsx(
                                 'w-full text-left px-3 py-2 text-sm rounded-md transition-colors flex items-center justify-between',
@@ -1021,6 +1053,47 @@ export function ClientDetailPage() {
                           ))}
                         </div>
                       </div>
+
+                      {/* User Filter Section */}
+                      {activityUsers.length > 0 && (
+                        <div className="p-3">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Team Member</span>
+                            {activityUserFilter && (
+                              <button
+                                onClick={() => setActivityUserFilter(null)}
+                                className="text-xs text-primary-600 hover:text-primary-700 dark:text-primary-400"
+                              >
+                                Clear
+                              </button>
+                            )}
+                          </div>
+                          <div className="space-y-1">
+                            {activityUsers.map((user) => (
+                              <button
+                                key={user.id}
+                                onClick={() => {
+                                  setActivityUserFilter(activityUserFilter === user.id ? null : user.id)
+                                }}
+                                className={clsx(
+                                  'w-full text-left px-3 py-2 text-sm rounded-md transition-colors flex items-center justify-between',
+                                  activityUserFilter === user.id
+                                    ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300'
+                                    : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
+                                )}
+                              >
+                                <span className="flex items-center">
+                                  <User className="h-4 w-4 mr-2" />
+                                  {user.name}
+                                </span>
+                                {activityUserFilter === user.id && (
+                                  <span className="text-primary-600 dark:text-primary-400">✓</span>
+                                )}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1046,22 +1119,49 @@ export function ClientDetailPage() {
               </div>
             </div>
 
-            {/* Active Filter Chip */}
-            {activityTypeFilter && (
+            {/* Active Filter Chips */}
+            {(activityTypeFilter || activityUserFilter) && (
               <div className="flex flex-wrap items-center gap-2 mb-4">
                 <span className="text-sm text-slate-500 dark:text-slate-400">Filtering by:</span>
-                <span className={clsx(
-                  'inline-flex items-center px-3 py-1 rounded-full text-sm font-medium',
-                  activityColors[activityTypeFilter]
-                )}>
-                  {activityTypeOptions.find(o => o.value === activityTypeFilter)?.label}
+                {activityTypeFilter && (
+                  <span className={clsx(
+                    'inline-flex items-center px-3 py-1 rounded-full text-sm font-medium',
+                    activityColors[activityTypeFilter]
+                  )}>
+                    {activityTypeOptions.find(o => o.value === activityTypeFilter)?.label}
+                    <button
+                      onClick={() => setActivityTypeFilter(null)}
+                      className="ml-2 hover:opacity-70"
+                      aria-label="Clear type filter"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                )}
+                {activityUserFilter && (
+                  <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
+                    <User className="h-3 w-3 mr-1.5" />
+                    {activityUsers.find(u => u.id === activityUserFilter)?.name || 'Unknown'}
+                    <button
+                      onClick={() => setActivityUserFilter(null)}
+                      className="ml-2 hover:opacity-70"
+                      aria-label="Clear user filter"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                )}
+                {activeFilterCount > 1 && (
                   <button
-                    onClick={() => setActivityTypeFilter(null)}
-                    className="ml-2 hover:opacity-70"
+                    onClick={() => {
+                      setActivityTypeFilter(null)
+                      setActivityUserFilter(null)
+                    }}
+                    className="text-xs text-primary-600 hover:text-primary-700 dark:text-primary-400 ml-2"
                   >
-                    <X className="h-3 w-3" />
+                    Clear all
                   </button>
-                </span>
+                )}
               </div>
             )}
             {activitiesLoading ? (
@@ -1076,12 +1176,15 @@ export function ClientDetailPage() {
               </div>
             ) : filteredActivities.length === 0 ? (
               <div className="text-center py-8 text-slate-500 dark:text-slate-400">
-                <p>No activities match the current filter</p>
+                <p>No activities match the current {activeFilterCount > 1 ? 'filters' : 'filter'}</p>
                 <button
-                  onClick={() => setActivityTypeFilter(null)}
+                  onClick={() => {
+                    setActivityTypeFilter(null)
+                    setActivityUserFilter(null)
+                  }}
                   className="text-sm mt-2 text-primary-600 hover:text-primary-700 dark:text-primary-400"
                 >
-                  Clear filter to see all activities
+                  Clear {activeFilterCount > 1 ? 'filters' : 'filter'} to see all activities
                 </button>
               </div>
             ) : (
