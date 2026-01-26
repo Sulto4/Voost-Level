@@ -236,13 +236,17 @@ export function AddClientModal({ isOpen, onClose, onClientAdded }: AddClientModa
       })
 
     if (insertError) {
-      // Detect network/connection errors
+      // Detect specific error types
       const errorMsg = insertError.message?.toLowerCase() || ''
       let userMessage: string
       if (errorMsg.includes('fetch') || errorMsg.includes('network') || errorMsg.includes('failed to fetch')) {
         userMessage = 'Network error. Please check your internet connection and try again.'
       } else if (errorMsg.includes('timeout')) {
         userMessage = 'Request timed out. Please try again.'
+      } else if (errorMsg.includes('duplicate') || errorMsg.includes('unique') || errorMsg.includes('already exists')) {
+        userMessage = 'A client with this email already exists. Please use a different email address or find the existing client.'
+      } else if (errorMsg.includes('violates')) {
+        userMessage = 'This data conflicts with an existing record. Please check for duplicates.'
       } else {
         userMessage = insertError.message || 'Failed to create client'
       }
