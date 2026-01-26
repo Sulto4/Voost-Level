@@ -6,6 +6,7 @@ import { supabase } from '../../lib/supabase'
 import { EditClientModal } from '../../components/clients/EditClientModal'
 import { AddProjectModal } from '../../components/projects/AddProjectModal'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
+import { Breadcrumbs } from '../../components/ui/Breadcrumbs'
 import type { Client, Project } from '../../types/database'
 
 const tabs = ['Overview', 'Projects', 'Activity', 'Files']
@@ -117,27 +118,27 @@ export function ClientDetailPage() {
 
   return (
     <div className="space-y-6">
+      {/* Breadcrumbs */}
+      <Breadcrumbs
+        items={[
+          { label: 'Clients', href: '/clients' },
+          { label: client.name },
+        ]}
+      />
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
-          <Link
-            to="/clients"
-            className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
-          >
-            <ArrowLeft className="h-5 w-5 text-slate-500" />
-          </Link>
-          <div className="flex items-center space-x-4">
-            <div className="h-12 w-12 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center text-primary-600 dark:text-primary-400 font-bold text-xl">
-              {client.name[0].toUpperCase()}
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-                {client.name}
-              </h1>
-              {client.company && (
-                <p className="text-slate-500 dark:text-slate-400">{client.company}</p>
-              )}
-            </div>
+          <div className="h-12 w-12 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center text-primary-600 dark:text-primary-400 font-bold text-xl">
+            {client.name[0].toUpperCase()}
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
+              {client.name}
+            </h1>
+            {client.company && (
+              <p className="text-slate-500 dark:text-slate-400">{client.company}</p>
+            )}
           </div>
         </div>
         <div className="flex items-center space-x-2">
