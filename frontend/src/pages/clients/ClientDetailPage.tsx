@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, Link, useNavigate, useLocation } from 'react-router-dom'
-import { ArrowLeft, Edit, Trash2, Mail, Phone, Globe, Building2, Plus, Calendar, DollarSign, MessageSquare, Users, CheckSquare, Download, Code, Star, User, RotateCcw } from 'lucide-react'
+import { ArrowLeft, Edit, Trash2, Mail, Phone, Globe, Building2, Plus, Calendar, DollarSign, MessageSquare, Users, CheckSquare, Download, Code, Star, User, RotateCcw, Filter, X } from 'lucide-react'
 import { clsx } from 'clsx'
 import { supabase } from '../../lib/supabase'
 import { formatRelativeTime } from '../../lib/dateUtils'
@@ -212,6 +212,9 @@ export function ClientDetailPage() {
   const [deletingContact, setDeletingContact] = useState(false)
   const [files, setFiles] = useState<(FileType & { uploader?: { full_name: string | null; email: string } })[]>([])
   const [filesLoading, setFilesLoading] = useState(false)
+  const [activityTypeFilter, setActivityTypeFilter] = useState<ActivityType | null>(null)
+  const [isActivityFilterDropdownOpen, setIsActivityFilterDropdownOpen] = useState(false)
+  const activityFilterRef = useRef<HTMLDivElement>(null)
   const { currentWorkspace, currentRole } = useWorkspace()
   const canEdit = currentRole !== 'viewer'
 
@@ -386,6 +389,32 @@ export function ClientDetailPage() {
     task: 'bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400',
     status_change: 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400',
   }
+
+  const activityTypeOptions: { value: ActivityType; label: string }[] = [
+    { value: 'call', label: 'Calls' },
+    { value: 'email', label: 'Emails' },
+    { value: 'meeting', label: 'Meetings' },
+    { value: 'note', label: 'Notes' },
+    { value: 'task', label: 'Tasks' },
+    { value: 'status_change', label: 'Status Changes' },
+  ]
+
+  // Filter activities by type
+  const filteredActivities = activities.filter(activity => {
+    if (!activityTypeFilter) return true
+    return activity.type === activityTypeFilter
+  })
+
+  // Close activity filter dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (activityFilterRef.current && !activityFilterRef.current.contains(event.target as Node)) {
+        setIsActivityFilterDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   async function handleDelete() {
     if (!client) return
@@ -925,29 +954,116 @@ export function ClientDetailPage() {
         )}
         {activeTab === 'Activity' && (
           <div>
-            <div className="flex justify-between items-center mb-4">
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-4">
               <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
                 Activity Timeline
               </h2>
-              {canEdit && (
-                <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
+                {/* Activity Type Filter */}
+                <div className="relative" ref={activityFilterRef}>
                   <button
-                    onClick={() => openLogActivity('call')}
-                    className="btn-outline flex items-center"
+                    onClick={() => setIsActivityFilterDropdownOpen(!isActivityFilterDropdownOpen)}
+                    className={clsx(
+                      'btn-outline flex items-center',
+                      activityTypeFilter && 'bg-primary-50 dark:bg-primary-900/20 border-primary-300 dark:border-primary-700'
+                    )}
                   >
-                    <Phone className="h-4 w-4 mr-2" />
-                    Log Call
+                    <Filter className="h-4 w-4 mr-2" />
+                    Filter
+                    {activityTypeFilter && (
+                      <span className="ml-2 h-5 w-5 flex items-center justify-center bg-primary-600 text-white text-xs rounded-full">
+                        1
+                      </span>
+                    )}
                   </button>
-                  <button
-                    onClick={() => openLogActivity('note')}
-                    className="btn-primary flex items-center"
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Note
-                  </button>
+
+                  {/* Filter Dropdown */}
+                  {isActivityFilterDropdownOpen && (
+                    <div className="absolute right-0 top-full mt-2 w-56 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg z-50">
+                      <div className="p-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Activity Type</span>
+                          {activityTypeFilter && (
+                            <button
+                              onClick={() => setActivityTypeFilter(null)}
+                              className="text-xs text-primary-600 hover:text-primary-700 dark:text-primary-400"
+                            >
+                              Clear
+                            </button>
+                          )}
+                        </div>
+                        <div className="space-y-1">
+                          {activityTypeOptions.map((option) => (
+                            <button
+                              key={option.value}
+                              onClick={() => {
+                                setActivityTypeFilter(activityTypeFilter === option.value ? null : option.value)
+                                setIsActivityFilterDropdownOpen(false)
+                              }}
+                              className={clsx(
+                                'w-full text-left px-3 py-2 text-sm rounded-md transition-colors flex items-center justify-between',
+                                activityTypeFilter === option.value
+                                  ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300'
+                                  : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
+                              )}
+                            >
+                              <span className="flex items-center">
+                                {(() => {
+                                  const Icon = activityIcons[option.value]
+                                  return <Icon className="h-4 w-4 mr-2" />
+                                })()}
+                                {option.label}
+                              </span>
+                              {activityTypeFilter === option.value && (
+                                <span className="text-primary-600 dark:text-primary-400">✓</span>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              )}
+
+                {canEdit && (
+                  <>
+                    <button
+                      onClick={() => openLogActivity('call')}
+                      className="btn-outline flex items-center"
+                    >
+                      <Phone className="h-4 w-4 mr-2" />
+                      Log Call
+                    </button>
+                    <button
+                      onClick={() => openLogActivity('note')}
+                      className="btn-primary flex items-center"
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Note
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
+
+            {/* Active Filter Chip */}
+            {activityTypeFilter && (
+              <div className="flex flex-wrap items-center gap-2 mb-4">
+                <span className="text-sm text-slate-500 dark:text-slate-400">Filtering by:</span>
+                <span className={clsx(
+                  'inline-flex items-center px-3 py-1 rounded-full text-sm font-medium',
+                  activityColors[activityTypeFilter]
+                )}>
+                  {activityTypeOptions.find(o => o.value === activityTypeFilter)?.label}
+                  <button
+                    onClick={() => setActivityTypeFilter(null)}
+                    className="ml-2 hover:opacity-70"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              </div>
+            )}
             {activitiesLoading ? (
               <div className="text-center py-8">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
@@ -958,9 +1074,19 @@ export function ClientDetailPage() {
                 <p>No activity yet</p>
                 <p className="text-sm mt-2">Log a call or add a note to start tracking activity.</p>
               </div>
+            ) : filteredActivities.length === 0 ? (
+              <div className="text-center py-8 text-slate-500 dark:text-slate-400">
+                <p>No activities match the current filter</p>
+                <button
+                  onClick={() => setActivityTypeFilter(null)}
+                  className="text-sm mt-2 text-primary-600 hover:text-primary-700 dark:text-primary-400"
+                >
+                  Clear filter to see all activities
+                </button>
+              </div>
             ) : (
               <div className="space-y-4">
-                {activities.map((activity) => {
+                {filteredActivities.map((activity) => {
                   const Icon = activityIcons[activity.type]
                   const colorClass = activityColors[activity.type]
                   const metadata = activity.metadata as Record<string, unknown> | null
