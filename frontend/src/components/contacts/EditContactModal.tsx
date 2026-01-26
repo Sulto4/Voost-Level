@@ -60,6 +60,21 @@ export function EditContactModal({ isOpen, onClose, contact, onContactUpdated }:
 
     setLoading(true)
 
+    // If setting this contact as primary, first unset any existing primary contact for this client
+    if (formData.is_primary && !contact.is_primary) {
+      const { error: unsetError } = await supabase
+        .from('client_contacts')
+        .update({ is_primary: false, updated_at: new Date().toISOString() })
+        .eq('client_id', contact.client_id)
+        .eq('is_primary', true)
+        .neq('id', contact.id)
+
+      if (unsetError) {
+        console.error('Error unsetting previous primary contact:', unsetError)
+        // Continue anyway, as we still want to update this contact
+      }
+    }
+
     const { error } = await supabase
       .from('client_contacts')
       .update({
