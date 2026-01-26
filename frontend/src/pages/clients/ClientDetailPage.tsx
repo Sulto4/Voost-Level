@@ -216,10 +216,11 @@ export function ClientDetailPage() {
   const [activityUserFilter, setActivityUserFilter] = useState<string | null>(null)
   const [isActivityFilterDropdownOpen, setIsActivityFilterDropdownOpen] = useState(false)
   const activityFilterRef = useRef<HTMLDivElement>(null)
-  // Activity pagination
+  // Activity pagination with infinite scroll
   const ACTIVITIES_PAGE_SIZE = 10
   const [activitiesHasMore, setActivitiesHasMore] = useState(false)
   const [loadingMoreActivities, setLoadingMoreActivities] = useState(false)
+  const activitiesEndRef = useRef<HTMLDivElement>(null)
   const { currentWorkspace, currentRole } = useWorkspace()
   const canEdit = currentRole !== 'viewer'
 
@@ -457,6 +458,30 @@ export function ClientDetailPage() {
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
+
+  // Infinite scroll for activities - load more when sentinel comes into view
+  useEffect(() => {
+    const sentinel = activitiesEndRef.current
+    if (!sentinel) return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries
+        // Load more when sentinel is visible and we have more to load
+        if (entry.isIntersecting && activitiesHasMore && !loadingMoreActivities && !activityTypeFilter && !activityUserFilter) {
+          fetchActivities(true)
+        }
+      },
+      {
+        root: null, // viewport
+        rootMargin: '100px', // trigger 100px before reaching the sentinel
+        threshold: 0.1,
+      }
+    )
+
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [activitiesHasMore, loadingMoreActivities, activityTypeFilter, activityUserFilter, activities.length])
 
   async function handleDelete() {
     if (!client) return
@@ -1272,23 +1297,30 @@ export function ClientDetailPage() {
                     </div>
                   )
                 })}
-                {/* Load More Button */}
-                {activitiesHasMore && !activityTypeFilter && !activityUserFilter && (
-                  <div className="text-center pt-4">
-                    <button
-                      onClick={() => fetchActivities(true)}
-                      disabled={loadingMoreActivities}
-                      className="btn-outline"
-                    >
-                      {loadingMoreActivities ? (
-                        <>
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-600 mr-2" />
-                          Loading...
-                        </>
-                      ) : (
-                        'Load More Activities'
-                      )}
-                    </button>
+                {/* Infinite scroll sentinel and loading indicator */}
+                {!activityTypeFilter && !activityUserFilter && (
+                  <div ref={activitiesEndRef} className="pt-4">
+                    {loadingMoreActivities && (
+                      <div className="flex justify-center items-center py-4">
+                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600" />
+                        <span className="ml-3 text-sm text-slate-500 dark:text-slate-400">Loading more activities...</span>
+                      </div>
+                    )}
+                    {activitiesHasMore && !loadingMoreActivities && (
+                      <div className="text-center">
+                        <button
+                          onClick={() => fetchActivities(true)}
+                          className="btn-outline"
+                        >
+                          Load More Activities
+                        </button>
+                      </div>
+                    )}
+                    {!activitiesHasMore && activities.length > ACTIVITIES_PAGE_SIZE && (
+                      <p className="text-center text-sm text-slate-400 dark:text-slate-500 py-4">
+                        You've reached the end of the activity timeline
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
