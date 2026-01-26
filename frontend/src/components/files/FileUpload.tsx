@@ -149,9 +149,34 @@ export function FileUpload({ clientId, workspaceId, projectId, onUploadComplete 
       const uploadId = newUploadingFiles[i].id
 
       try {
-        // Generate unique file path
+        // Generate unique file path with robust path traversal prevention
         const timestamp = Date.now()
-        const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_')
+        // Sanitize filename to prevent path traversal attacks:
+        // 1. Get only the base filename (remove any path components)
+        // 2. Remove any directory separators and path traversal sequences
+        // 3. Replace any remaining unsafe characters
+        // 4. Ensure no consecutive dots that could form '..'
+        let sanitizedName = file.name
+          .split(/[/\\]/).pop() || 'file' // Get basename, remove any path
+          .replace(/\.\./g, '_') // Replace any '..' sequences
+          .replace(/[/\\:*?"<>|]/g, '_') // Remove path separators and unsafe chars
+          .replace(/[^a-zA-Z0-9._-]/g, '_') // Only allow safe characters
+          .replace(/\.{2,}/g, '.') // Collapse multiple dots to single dot
+          .replace(/^[.-]+/, '') // Remove leading dots/dashes that could be problematic
+          .trim()
+
+        // Ensure we have a valid filename
+        if (!sanitizedName || sanitizedName.length === 0) {
+          sanitizedName = 'file'
+        }
+
+        // Limit filename length
+        if (sanitizedName.length > 200) {
+          const ext = sanitizedName.split('.').pop() || ''
+          const name = sanitizedName.substring(0, 200 - ext.length - 1)
+          sanitizedName = ext ? `${name}.${ext}` : name
+        }
+
         const storagePath = `${workspaceId}/${clientId}/${timestamp}_${sanitizedName}`
 
         // Upload to Supabase Storage
