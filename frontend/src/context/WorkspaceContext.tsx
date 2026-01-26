@@ -34,7 +34,7 @@ interface WorkspaceContextType {
 const WorkspaceContext = createContext<WorkspaceContextType | undefined>(undefined)
 
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuth()
+  const { user, loading: authLoading } = useAuth()
   const [workspaces, setWorkspaces] = useState<WorkspaceWithRole[]>([])
   const [currentWorkspace, setCurrentWorkspace] = useState<WorkspaceWithRole | null>(null)
   const [loading, setLoading] = useState(true)
@@ -45,6 +45,12 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   })
 
   useEffect(() => {
+    // Wait for auth to finish loading before determining workspace state
+    if (authLoading) {
+      setLoading(true)
+      return
+    }
+
     if (user) {
       fetchWorkspaces()
     } else {
@@ -52,7 +58,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       setCurrentWorkspace(null)
       setLoading(false)
     }
-  }, [user])
+  }, [user, authLoading])
 
   async function fetchWorkspaces() {
     if (!user) return

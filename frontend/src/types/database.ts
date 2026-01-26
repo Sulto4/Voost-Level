@@ -359,6 +359,79 @@ export type Database = {
           created_at?: string
         }
       }
+      milestones: {
+        Row: {
+          id: string
+          project_id: string
+          name: string
+          description: string | null
+          due_date: string | null
+          completed: boolean
+          completed_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          project_id: string
+          name: string
+          description?: string | null
+          due_date?: string | null
+          completed?: boolean
+          completed_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          project_id?: string
+          name?: string
+          description?: string | null
+          due_date?: string | null
+          completed?: boolean
+          completed_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      webhooks: {
+        Row: {
+          id: string
+          workspace_id: string
+          name: string
+          url: string
+          secret: string | null
+          events: string[]
+          is_active: boolean
+          created_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          workspace_id: string
+          name: string
+          url: string
+          secret?: string | null
+          events: string[]
+          is_active?: boolean
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          workspace_id?: string
+          name?: string
+          url?: string
+          secret?: string | null
+          events?: string[]
+          is_active?: boolean
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
     }
     Views: {
       [_ in never]: never
@@ -388,6 +461,8 @@ export type Task = Database['public']['Tables']['tasks']['Row']
 export type PipelineStage = Database['public']['Tables']['pipeline_stages']['Row']
 export type Activity = Database['public']['Tables']['activities']['Row']
 export type File = Database['public']['Tables']['files']['Row']
+export type Milestone = Database['public']['Tables']['milestones']['Row']
+export type Webhook = Database['public']['Tables']['webhooks']['Row']
 
 export type ClientStatus = Database['public']['Enums']['client_status']
 export type ProjectStatus = Database['public']['Enums']['project_status']

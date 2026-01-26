@@ -1,0 +1,91 @@
+Name,Company,Email,Phone,Status,Value,Source
+Load Test Client 1,Load Test Company 1,loadtest1@example.com,+1-555-0001,lead,100,Website
+Load Test Client 2,Load Test Company 2,loadtest2@example.com,+1-555-0002,active,200,Referral
+Load Test Client 3,Load Test Company 3,loadtest3@example.com,+1-555-0003,inactive,300,LinkedIn
+Load Test Client 4,Load Test Company 4,loadtest4@example.com,+1-555-0004,churned,400,Google Ads
+Load Test Client 5,Load Test Company 5,loadtest5@example.com,+1-555-0005,lead,500,Cold Call
+Load Test Client 6,Load Test Company 6,loadtest6@example.com,+1-555-0006,active,600,Trade Show
+Load Test Client 7,Load Test Company 7,loadtest7@example.com,+1-555-0007,inactive,700,Website
+Load Test Client 8,Load Test Company 8,loadtest8@example.com,+1-555-0008,churned,800,Referral
+Load Test Client 9,Load Test Company 9,loadtest9@example.com,+1-555-0009,lead,900,LinkedIn
+Load Test Client 10,Load Test Company 10,loadtest10@example.com,+1-555-0010,active,1000,Google Ads
+Load Test Client 11,Load Test Company 11,loadtest11@example.com,+1-555-0011,inactive,1100,Cold Call
+Load Test Client 12,Load Test Company 12,loadtest12@example.com,+1-555-0012,churned,1200,Trade Show
+Load Test Client 13,Load Test Company 13,loadtest13@example.com,+1-555-0013,lead,1300,Website
+Load Test Client 14,Load Test Company 14,loadtest14@example.com,+1-555-0014,active,1400,Referral
+Load Test Client 15,Load Test Company 15,loadtest15@example.com,+1-555-0015,inactive,1500,LinkedIn
+Load Test Client 16,Load Test Company 16,loadtest16@example.com,+1-555-0016,churned,1600,Google Ads
+Load Test Client 17,Load Test Company 17,loadtest17@example.com,+1-555-0017,lead,1700,Cold Call
+Load Test Client 18,Load Test Company 18,loadtest18@example.com,+1-555-0018,active,1800,Trade Show
+Load Test Client 19,Load Test Company 19,loadtest19@example.com,+1-555-0019,inactive,1900,Website
+Load Test Client 20,Load Test Company 20,loadtest20@example.com,+1-555-0020,churned,2000,Referral
+Load Test Client 21,Load Test Company 21,loadtest21@example.com,+1-555-0021,lead,2100,LinkedIn
+Load Test Client 22,Load Test Company 22,loadtest22@example.com,+1-555-0022,active,2200,Google Ads
+Load Test Client 23,Load Test Company 23,loadtest23@example.com,+1-555-0023,inactive,2300,Cold Call
+Load Test Client 24,Load Test Company 24,loadtest24@example.com,+1-555-0024,churned,2400,Trade Show
+Load Test Client 25,Load Test Company 25,loadtest25@example.com,+1-555-0025,lead,2500,Website
+Load Test Client 26,Load Test Company 26,loadtest26@example.com,+1-555-0026,active,2600,Referral
+Load Test Client 27,Load Test Company 27,loadtest27@example.com,+1-555-0027,inactive,2700,LinkedIn
+Load Test Client 28,Load Test Company 28,loadtest28@example.com,+1-555-0028,churned,2800,Google Ads
+Load Test Client 29,Load Test Company 29,loadtest29@example.com,+1-555-0029,lead,2900,Cold Call
+Load Test Client 30,Load Test Company 30,loadtest30@example.com,+1-555-0030,active,3000,Trade Show
+Load Test Client 31,Load Test Company 31,loadtest31@example.com,+1-555-0031,inactive,3100,Website
+Load Test Client 32,Load Test Company 32,loadtest32@example.com,+1-555-0032,churned,3200,Referral
+Load Test Client 33,Load Test Company 33,loadtest33@example.com,+1-555-0033,lead,3300,LinkedIn
+Load Test Client 34,Load Test Company 34,loadtest34@example.com,+1-555-0034,active,3400,Google Ads
+Load Test Client 35,Load Test Company 35,loadtest35@example.com,+1-555-0035,inactive,3500,Cold Call
+Load Test Client 36,Load Test Company 36,loadtest36@example.com,+1-555-0036,churned,3600,Trade Show
+Load Test Client 37,Load Test Company 37,loadtest37@example.com,+1-555-0037,lead,3700,Website
+Load Test Client 38,Load Test Company 38,loadtest38@example.com,+1-555-0038,active,3800,Referral
+Load Test Client 39,Load Test Company 39,loadtest39@example.com,+1-555-0039,inactive,3900,LinkedIn
+Load Test Client 40,Load Test Company 40,loadtest40@example.com,+1-555-0040,churned,4000,Google Ads
+Load Test Client 41,Load Test Company 41,loadtest41@example.com,+1-555-0041,lead,4100,Cold Call
+Load Test Client 42,Load Test Company 42,loadtest42@example.com,+1-555-0042,active,4200,Trade Show
+Load Test Client 43,Load Test Company 43,loadtest43@example.com,+1-555-0043,inactive,4300,Website
+Load Test Client 44,Load Test Company 44,loadtest44@example.com,+1-555-0044,churned,4400,Referral
+Load Test Client 45,Load Test Company 45,loadtest45@example.com,+1-555-0045,lead,4500,LinkedIn
+Load Test Client 46,Load Test Company 46,loadtest46@example.com,+1-555-0046,active,4600,Google Ads
+Load Test Client 47,Load Test Company 47,loadtest47@example.com,+1-555-0047,inactive,4700,Cold Call
+Load Test Client 48,Load Test Company 48,loadtest48@example.com,+1-555-0048,churned,4800,Trade Show
+Load Test Client 49,Load Test Company 49,loadtest49@example.com,+1-555-0049,lead,4900,Website
+Load Test Client 50,Load Test Company 50,loadtest50@example.com,+1-555-0050,active,5000,Referral
+Load Test Client 51,Load Test Company 51,loadtest51@example.com,+1-555-0051,inactive,5100,LinkedIn
+Load Test Client 52,Load Test Company 52,loadtest52@example.com,+1-555-0052,churned,5200,Google Ads
+Load Test Client 53,Load Test Company 53,loadtest53@example.com,+1-555-0053,lead,5300,Cold Call
+Load Test Client 54,Load Test Company 54,loadtest54@example.com,+1-555-0054,active,5400,Trade Show
+Load Test Client 55,Load Test Company 55,loadtest55@example.com,+1-555-0055,inactive,5500,Website
+Load Test Client 56,Load Test Company 56,loadtest56@example.com,+1-555-0056,churned,5600,Referral
+Load Test Client 57,Load Test Company 57,loadtest57@example.com,+1-555-0057,lead,5700,LinkedIn
+Load Test Client 58,Load Test Company 58,loadtest58@example.com,+1-555-0058,active,5800,Google Ads
+Load Test Client 59,Load Test Company 59,loadtest59@example.com,+1-555-0059,inactive,5900,Cold Call
+Load Test Client 60,Load Test Company 60,loadtest60@example.com,+1-555-0060,churned,6000,Trade Show
+Load Test Client 61,Load Test Company 61,loadtest61@example.com,+1-555-0061,lead,6100,Website
+Load Test Client 62,Load Test Company 62,loadtest62@example.com,+1-555-0062,active,6200,Referral
+Load Test Client 63,Load Test Company 63,loadtest63@example.com,+1-555-0063,inactive,6300,LinkedIn
+Load Test Client 64,Load Test Company 64,loadtest64@example.com,+1-555-0064,churned,6400,Google Ads
+Load Test Client 65,Load Test Company 65,loadtest65@example.com,+1-555-0065,lead,6500,Cold Call
+Load Test Client 66,Load Test Company 66,loadtest66@example.com,+1-555-0066,active,6600,Trade Show
+Load Test Client 67,Load Test Company 67,loadtest67@example.com,+1-555-0067,inactive,6700,Website
+Load Test Client 68,Load Test Company 68,loadtest68@example.com,+1-555-0068,churned,6800,Referral
+Load Test Client 69,Load Test Company 69,loadtest69@example.com,+1-555-0069,lead,6900,LinkedIn
+Load Test Client 70,Load Test Company 70,loadtest70@example.com,+1-555-0070,active,7000,Google Ads
+Load Test Client 71,Load Test Company 71,loadtest71@example.com,+1-555-0071,inactive,7100,Cold Call
+Load Test Client 72,Load Test Company 72,loadtest72@example.com,+1-555-0072,churned,7200,Trade Show
+Load Test Client 73,Load Test Company 73,loadtest73@example.com,+1-555-0073,lead,7300,Website
+Load Test Client 74,Load Test Company 74,loadtest74@example.com,+1-555-0074,active,7400,Referral
+Load Test Client 75,Load Test Company 75,loadtest75@example.com,+1-555-0075,inactive,7500,LinkedIn
+Load Test Client 76,Load Test Company 76,loadtest76@example.com,+1-555-0076,churned,7600,Google Ads
+Load Test Client 77,Load Test Company 77,loadtest77@example.com,+1-555-0077,lead,7700,Cold Call
+Load Test Client 78,Load Test Company 78,loadtest78@example.com,+1-555-0078,active,7800,Trade Show
+Load Test Client 79,Load Test Company 79,loadtest79@example.com,+1-555-0079,inactive,7900,Website
+Load Test Client 80,Load Test Company 80,loadtest80@example.com,+1-555-0080,churned,8000,Referral
+Load Test Client 81,Load Test Company 81,loadtest81@example.com,+1-555-0081,lead,8100,LinkedIn
+Load Test Client 82,Load Test Company 82,loadtest82@example.com,+1-555-0082,active,8200,Google Ads
+Load Test Client 83,Load Test Company 83,loadtest83@example.com,+1-555-0083,inactive,8300,Cold Call
+Load Test Client 84,Load Test Company 84,loadtest84@example.com,+1-555-0084,churned,8400,Trade Show
+Load Test Client 85,Load Test Company 85,loadtest85@example.com,+1-555-0085,lead,8500,Website
+Load Test Client 86,Load Test Company 86,loadtest86@example.com,+1-555-0086,active,8600,Referral
+Load Test Client 87,Load Test Company 87,loadtest87@example.com,+1-555-0087,inactive,8700,LinkedIn
+Load Test Client 88,Load Test Company 88,loadtest88@example.com,+1-555-0088,churned,8800,Google Ads
+Load Test Client 89,Load Test Company 89,loadtest89@example.com,+1-555-0089,lead,8900,Cold Call
+Load Test Client 90,Load Test Company 90,loadtest90@example.com,+1-555-0090,active,9000,Trade Show

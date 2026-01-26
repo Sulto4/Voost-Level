@@ -191,9 +191,87 @@ The backend is powered by Supabase. Key endpoints:
 - `GET/PATCH/DELETE /rest/v1/workspaces/:id` - Workspace operations
 - `GET/POST /rest/v1/clients` - List/Create clients
 - `GET/PATCH/DELETE /rest/v1/clients/:id` - Client operations
-- `GET /rest/v1/clients/:id/context` - AI-optimized context export
 - `GET/POST /rest/v1/projects` - List/Create projects
 - `GET/PATCH/DELETE /rest/v1/projects/:id` - Project operations
+
+### RPC Functions (AI Integration)
+- `POST /rest/v1/rpc/get_client_context` - AI-optimized client context export
+
+#### get_client_context
+
+Returns a structured JSON object optimized for AI agent context windows.
+
+**Request:**
+```json
+POST /rest/v1/rpc/get_client_context
+Content-Type: application/json
+apikey: <your-anon-key>
+Authorization: Bearer <your-anon-key>
+
+{
+  "p_client_id": "uuid-of-client"
+}
+```
+
+**Response:**
+```json
+{
+  "client": {
+    "id": "uuid",
+    "name": "Client Name",
+    "company": "Company Name",
+    "email": "email@example.com",
+    "phone": "+1-555-0001",
+    "website": "https://example.com",
+    "status": "lead|active|inactive|churned",
+    "source": "Website",
+    "value": 1000,
+    "notes": "Client notes",
+    "created_at": "2026-01-26T00:00:00Z",
+    "updated_at": "2026-01-26T00:00:00Z"
+  },
+  "projects": [
+    {
+      "id": "uuid",
+      "name": "Project Name",
+      "description": "Project description",
+      "status": "planning|in_progress|review|completed|cancelled",
+      "start_date": "2026-01-01",
+      "due_date": "2026-03-15",
+      "budget": 15000,
+      "tasks_count": 5,
+      "tasks_completed": 2
+    }
+  ],
+  "recent_activities": [
+    {
+      "id": "uuid",
+      "type": "note|call|email|meeting|task|status_change",
+      "content": "Activity description",
+      "created_at": "2026-01-26T00:00:00Z",
+      "user_name": "User Name"
+    }
+  ],
+  "contacts": [
+    {
+      "id": "uuid",
+      "name": "Contact Name",
+      "email": "contact@example.com",
+      "phone": "+1-555-0001",
+      "role": "CEO",
+      "is_primary": true
+    }
+  ],
+  "summary": {
+    "total_projects": 3,
+    "active_projects": 1,
+    "total_activities": 10,
+    "last_activity_at": "2026-01-26T00:00:00Z"
+  }
+}
+```
+
+**Note:** The `recent_activities` array is limited to the 10 most recent activities to optimize for AI context windows.
 
 ## Database Schema
 

@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Edit, Trash2, Mail, Phone, Globe, Building2, Plus, Calendar, DollarSign } from 'lucide-react'
+import { ArrowLeft, Edit, Trash2, Mail, Phone, Globe, Building2, Plus, Calendar, DollarSign, MessageSquare, Users, CheckSquare } from 'lucide-react'
 import { clsx } from 'clsx'
 import { supabase } from '../../lib/supabase'
 import { EditClientModal } from '../../components/clients/EditClientModal'
 import { AddProjectModal } from '../../components/projects/AddProjectModal'
+import { EditProjectModal } from '../../components/projects/EditProjectModal'
+import { LogActivityModal } from '../../components/activities/LogActivityModal'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { Breadcrumbs } from '../../components/ui/Breadcrumbs'
-import type { Client, Project } from '../../types/database'
+import type { Client, Project, Activity, ActivityType } from '../../types/database'
 
 const tabs = ['Overview', 'Projects', 'Activity', 'Files']
 
@@ -21,13 +23,20 @@ export function ClientDetailPage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [isAddProjectModalOpen, setIsAddProjectModalOpen] = useState(false)
+  const [isEditProjectModalOpen, setIsEditProjectModalOpen] = useState(false)
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null)
   const [projects, setProjects] = useState<Project[]>([])
   const [projectsLoading, setProjectsLoading] = useState(false)
+  const [isLogActivityModalOpen, setIsLogActivityModalOpen] = useState(false)
+  const [defaultActivityType, setDefaultActivityType] = useState<ActivityType>('call')
+  const [activities, setActivities] = useState<Activity[]>([])
+  const [activitiesLoading, setActivitiesLoading] = useState(false)
 
   useEffect(() => {
     if (id) {
       fetchClient()
       fetchProjects()
+      fetchActivities()
     }
   }, [id])
 
@@ -63,6 +72,46 @@ export function ClientDetailPage() {
       setProjects(data || [])
     }
     setProjectsLoading(false)
+  }
+
+  async function fetchActivities() {
+    if (!id) return
+    setActivitiesLoading(true)
+    const { data, error } = await supabase
+      .from('activities')
+      .select('*')
+      .eq('client_id', id)
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      console.error('Error fetching activities:', error)
+    } else {
+      setActivities(data || [])
+    }
+    setActivitiesLoading(false)
+  }
+
+  function openLogActivity(type: ActivityType = 'call') {
+    setDefaultActivityType(type)
+    setIsLogActivityModalOpen(true)
+  }
+
+  const activityIcons: Record<ActivityType, React.ComponentType<{ className?: string }>> = {
+    call: Phone,
+    email: Mail,
+    meeting: Users,
+    note: MessageSquare,
+    task: CheckSquare,
+    status_change: Edit,
+  }
+
+  const activityColors: Record<ActivityType, string> = {
+    call: 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400',
+    email: 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400',
+    meeting: 'bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400',
+    note: 'bg-yellow-100 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-400',
+    task: 'bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400',
+    status_change: 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400',
   }
 
   async function handleDelete() {
@@ -350,6 +399,16 @@ export function ClientDetailPage() {
                           )}
                         </div>
                       </div>
+                      <button
+                        onClick={() => {
+                          setSelectedProject(project)
+                          setIsEditProjectModalOpen(true)
+                        }}
+                        className="btn-outline p-2 min-w-[44px] min-h-[44px]"
+                        title="Edit project"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -358,9 +417,93 @@ export function ClientDetailPage() {
           </div>
         )}
         {activeTab === 'Activity' && (
-          <div className="text-center py-8 text-slate-500 dark:text-slate-400">
-            <p>No activity yet</p>
-            <button className="btn-primary mt-4">Add Note</button>
+          <div>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+                Activity Timeline
+              </h2>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => openLogActivity('call')}
+                  className="btn-outline flex items-center"
+                >
+                  <Phone className="h-4 w-4 mr-2" />
+                  Log Call
+                </button>
+                <button
+                  onClick={() => openLogActivity('note')}
+                  className="btn-primary flex items-center"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Note
+                </button>
+              </div>
+            </div>
+            {activitiesLoading ? (
+              <div className="text-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+                <p className="mt-4 text-slate-500 dark:text-slate-400">Loading activities...</p>
+              </div>
+            ) : activities.length === 0 ? (
+              <div className="text-center py-8 text-slate-500 dark:text-slate-400">
+                <p>No activity yet</p>
+                <p className="text-sm mt-2">Log a call or add a note to start tracking activity.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {activities.map((activity) => {
+                  const Icon = activityIcons[activity.type]
+                  const colorClass = activityColors[activity.type]
+                  const metadata = activity.metadata as Record<string, unknown> | null
+
+                  return (
+                    <div
+                      key={activity.id}
+                      className="flex gap-4 p-4 border border-slate-200 dark:border-slate-700 rounded-lg"
+                    >
+                      <div className={`flex-shrink-0 h-10 w-10 rounded-full flex items-center justify-center ${colorClass}`}>
+                        <Icon className="h-5 w-5" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="font-medium text-slate-900 dark:text-white capitalize">
+                            {activity.type === 'status_change' ? 'Status Change' : activity.type}
+                          </span>
+                          {metadata?.duration && (
+                            <span className="text-xs bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 px-2 py-0.5 rounded">
+                              {String(metadata.duration)}
+                            </span>
+                          )}
+                          {metadata?.outcome && (
+                            <span className={`text-xs px-2 py-0.5 rounded ${
+                              metadata.outcome === 'positive' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
+                              metadata.outcome === 'negative' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
+                              'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                            }`}>
+                              {String(metadata.outcome).replace('_', ' ')}
+                            </span>
+                          )}
+                        </div>
+                        {activity.content && (
+                          <p className="text-slate-600 dark:text-slate-300 whitespace-pre-wrap">
+                            {activity.content}
+                          </p>
+                        )}
+                        <p className="text-xs text-slate-400 dark:text-slate-500 mt-2">
+                          {new Date(activity.created_at).toLocaleString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric',
+                            hour: 'numeric',
+                            minute: '2-digit',
+                          })}
+                        </p>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
         )}
         {activeTab === 'Files' && (
@@ -397,6 +540,26 @@ export function ClientDetailPage() {
         onClose={() => setIsAddProjectModalOpen(false)}
         client={client}
         onProjectAdded={fetchProjects}
+      />
+
+      {/* Edit Project Modal */}
+      <EditProjectModal
+        isOpen={isEditProjectModalOpen}
+        onClose={() => {
+          setIsEditProjectModalOpen(false)
+          setSelectedProject(null)
+        }}
+        project={selectedProject}
+        onProjectUpdated={fetchProjects}
+      />
+
+      {/* Log Activity Modal */}
+      <LogActivityModal
+        isOpen={isLogActivityModalOpen}
+        onClose={() => setIsLogActivityModalOpen(false)}
+        clientId={client.id}
+        onActivityLogged={fetchActivities}
+        defaultType={defaultActivityType}
       />
     </div>
   )

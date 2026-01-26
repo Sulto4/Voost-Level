@@ -1,13 +1,16 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Search, Filter, MoreHorizontal, Building2, Mail, Phone, ChevronLeft, ChevronRight, X } from 'lucide-react'
+import { Plus, Search, Filter, MoreHorizontal, Building2, Mail, Phone, ChevronLeft, ChevronRight, X, Download, Upload, Trash2, CheckSquare, AlertTriangle } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import { AddClientModal } from '../../components/clients/AddClientModal'
+import { ImportClientsModal } from '../../components/clients/ImportClientsModal'
 import { ClientTableSkeleton } from '../../components/ui/Skeleton'
 import type { Client, ClientStatus } from '../../types/database'
 
 const ITEMS_PER_PAGE = 20
+
+type DateFilter = 'today' | 'this_week' | 'this_month' | null
 
 export function ClientsPage() {
   const { currentWorkspace } = useWorkspace()
@@ -15,21 +18,66 @@ export function ClientsPage() {
   const [clients, setClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
   const [totalCount, setTotalCount] = useState(0)
   const [statusFilter, setStatusFilter] = useState<ClientStatus | null>(null)
+  const [dateFilter, setDateFilter] = useState<DateFilter>(null)
   const [showFilters, setShowFilters] = useState(false)
+  const [selectedClients, setSelectedClients] = useState<Set<string>>(new Set())
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [deleteSuccess, setDeleteSuccess] = useState<string | null>(null)
+
+  // Get date range based on filter (timezone-aware using local dates)
+  function getDateRange(filter: DateFilter): { start: string; end: string } | null {
+    if (!filter) return null
+
+    const now = new Date()
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+
+    if (filter === 'today') {
+      const tomorrow = new Date(today)
+      tomorrow.setDate(tomorrow.getDate() + 1)
+      return {
+        start: today.toISOString(),
+        end: tomorrow.toISOString()
+      }
+    }
+
+    if (filter === 'this_week') {
+      const startOfWeek = new Date(today)
+      startOfWeek.setDate(today.getDate() - today.getDay()) // Sunday
+      const endOfWeek = new Date(startOfWeek)
+      endOfWeek.setDate(startOfWeek.getDate() + 7)
+      return {
+        start: startOfWeek.toISOString(),
+        end: endOfWeek.toISOString()
+      }
+    }
+
+    if (filter === 'this_month') {
+      const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1)
+      const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1)
+      return {
+        start: startOfMonth.toISOString(),
+        end: endOfMonth.toISOString()
+      }
+    }
+
+    return null
+  }
 
   useEffect(() => {
     if (currentWorkspace) {
       fetchClients()
     }
-  }, [currentWorkspace, currentPage, statusFilter])
+  }, [currentWorkspace, currentPage, statusFilter, dateFilter])
 
   // Reset to page 1 when search query or filters change
   useEffect(() => {
     setCurrentPage(1)
-  }, [searchQuery, statusFilter])
+  }, [searchQuery, statusFilter, dateFilter])
 
   async function fetchClients() {
     if (!currentWorkspace) return
@@ -45,6 +93,12 @@ export function ClientsPage() {
     // Apply status filter to count query
     if (statusFilter) {
       countQuery = countQuery.eq('status', statusFilter)
+    }
+
+    // Apply date filter to count query
+    const dateRange = getDateRange(dateFilter)
+    if (dateRange) {
+      countQuery = countQuery.gte('created_at', dateRange.start).lt('created_at', dateRange.end)
     }
 
     const { count, error: countError } = await countQuery
@@ -67,6 +121,11 @@ export function ClientsPage() {
     // Apply status filter to data query
     if (statusFilter) {
       dataQuery = dataQuery.eq('status', statusFilter)
+    }
+
+    // Apply date filter to data query
+    if (dateRange) {
+      dataQuery = dataQuery.gte('created_at', dateRange.start).lt('created_at', dateRange.end)
     }
 
     const { data, error } = await dataQuery
@@ -118,6 +177,140 @@ export function ClientsPage() {
     churned: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
   }
 
+  // Bulk selection functions
+  function toggleClientSelection(clientId: string) {
+    setSelectedClients(prev => {
+      const next = new Set(prev)
+      if (next.has(clientId)) {
+        next.delete(clientId)
+      } else {
+        next.add(clientId)
+      }
+      return next
+    })
+  }
+
+  function toggleSelectAll() {
+    if (selectedClients.size === filteredClients.length) {
+      setSelectedClients(new Set())
+    } else {
+      setSelectedClients(new Set(filteredClients.map(c => c.id)))
+    }
+  }
+
+  function clearSelection() {
+    setSelectedClients(new Set())
+  }
+
+  const isAllSelected = filteredClients.length > 0 && selectedClients.size === filteredClients.length
+  const isSomeSelected = selectedClients.size > 0 && selectedClients.size < filteredClients.length
+
+  // Bulk delete selected clients
+  async function handleBulkDelete() {
+    if (selectedClients.size === 0) return
+
+    setIsDeleting(true)
+    const clientIds = Array.from(selectedClients)
+
+    const { error } = await supabase
+      .from('clients')
+      .delete()
+      .in('id', clientIds)
+
+    if (error) {
+      console.error('Error deleting clients:', error)
+      alert('Failed to delete clients. Please try again.')
+    } else {
+      setDeleteSuccess(`Successfully deleted ${clientIds.length} client${clientIds.length > 1 ? 's' : ''}`)
+      setSelectedClients(new Set())
+      fetchClients()
+      // Clear success message after 3 seconds
+      setTimeout(() => setDeleteSuccess(null), 3000)
+    }
+
+    setIsDeleting(false)
+    setIsDeleteModalOpen(false)
+  }
+
+  // Export filtered clients to CSV
+  async function exportToCSV() {
+    if (!currentWorkspace) return
+
+    // Build query with current filters to get ALL filtered data (not just current page)
+    let query = supabase
+      .from('clients')
+      .select('*')
+      .eq('workspace_id', currentWorkspace.id)
+
+    // Apply status filter
+    if (statusFilter) {
+      query = query.eq('status', statusFilter)
+    }
+
+    // Apply date filter
+    const dateRange = getDateRange(dateFilter)
+    if (dateRange) {
+      query = query.gte('created_at', dateRange.start).lt('created_at', dateRange.end)
+    }
+
+    const { data, error } = await query.order('created_at', { ascending: false })
+
+    if (error) {
+      console.error('Error fetching clients for export:', error)
+      return
+    }
+
+    let exportData = data || []
+
+    // Apply client-side search filter
+    if (searchQuery.trim()) {
+      const queryLower = searchQuery.trim().toLowerCase()
+      exportData = exportData.filter((client) =>
+        client.name.toLowerCase().includes(queryLower) ||
+        client.company?.toLowerCase().includes(queryLower) ||
+        client.email?.toLowerCase().includes(queryLower) ||
+        client.source?.toLowerCase().includes(queryLower)
+      )
+    }
+
+    if (exportData.length === 0) {
+      alert('No clients to export')
+      return
+    }
+
+    // Create CSV content
+    const headers = ['Name', 'Company', 'Email', 'Phone', 'Status', 'Value', 'Source', 'Website', 'Notes', 'Created']
+    const rows = exportData.map(client => [
+      client.name || '',
+      client.company || '',
+      client.email || '',
+      client.phone || '',
+      client.status || '',
+      client.value?.toString() || '',
+      client.source || '',
+      client.website || '',
+      (client.notes || '').replace(/"/g, '""'), // Escape quotes in notes
+      client.created_at ? new Date(client.created_at).toLocaleDateString() : ''
+    ])
+
+    // Build CSV string
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n')
+
+    // Create and trigger download
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    const url = URL.createObjectURL(blob)
+    link.setAttribute('href', url)
+    link.setAttribute('download', `clients-export-${new Date().toISOString().split('T')[0]}.csv`)
+    link.style.visibility = 'hidden'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -150,15 +343,33 @@ export function ClientsPage() {
             className="input pl-10"
           />
         </div>
+        <button
+          onClick={() => setIsImportModalOpen(true)}
+          className="btn-outline min-h-[44px]"
+          title="Import clients from CSV"
+        >
+          <Upload className="h-5 w-5 mr-2" />
+          Import
+        </button>
+        <button
+          onClick={exportToCSV}
+          className="btn-outline min-h-[44px]"
+          title="Export filtered clients to CSV"
+        >
+          <Download className="h-5 w-5 mr-2" />
+          Export
+        </button>
         <div className="relative">
           <button
             onClick={() => setShowFilters(!showFilters)}
-            className={`btn-outline min-h-[44px] ${statusFilter ? 'border-primary-500 text-primary-600' : ''}`}
+            className={`btn-outline min-h-[44px] ${(statusFilter || dateFilter) ? 'border-primary-500 text-primary-600' : ''}`}
           >
             <Filter className="h-5 w-5 mr-2" />
             Filters
-            {statusFilter && (
-              <span className="ml-2 px-1.5 py-0.5 text-xs bg-primary-100 dark:bg-primary-900/30 rounded">1</span>
+            {(statusFilter || dateFilter) && (
+              <span className="ml-2 px-1.5 py-0.5 text-xs bg-primary-100 dark:bg-primary-900/30 rounded">
+                {(statusFilter ? 1 : 0) + (dateFilter ? 1 : 0)}
+              </span>
             )}
           </button>
           {showFilters && (
@@ -166,10 +377,11 @@ export function ClientsPage() {
               <div className="p-4">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-sm font-medium text-slate-900 dark:text-white">Filters</h3>
-                  {statusFilter && (
+                  {(statusFilter || dateFilter) && (
                     <button
                       onClick={() => {
                         setStatusFilter(null)
+                        setDateFilter(null)
                         setShowFilters(false)
                       }}
                       className="text-xs text-primary-600 hover:text-primary-700"
@@ -178,30 +390,55 @@ export function ClientsPage() {
                     </button>
                   )}
                 </div>
-                <div>
-                  <label className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-2 block">Status</label>
-                  <div className="space-y-1">
-                    {(['lead', 'active', 'inactive', 'churned'] as ClientStatus[]).map((status) => (
-                      <button
-                        key={status}
-                        onClick={() => {
-                          setStatusFilter(statusFilter === status ? null : status)
-                          setShowFilters(false)
-                        }}
-                        className={`w-full px-3 py-2 text-left text-sm rounded-lg capitalize transition-colors ${
-                          statusFilter === status
-                            ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300'
-                            : 'hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'
-                        }`}
-                      >
-                        <span className={`inline-block w-2 h-2 rounded-full mr-2 ${
-                          status === 'lead' ? 'bg-yellow-500' :
-                          status === 'active' ? 'bg-green-500' :
-                          status === 'inactive' ? 'bg-slate-400' : 'bg-red-500'
-                        }`} />
-                        {status}
-                      </button>
-                    ))}
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-2 block">Status</label>
+                    <div className="space-y-1">
+                      {(['lead', 'active', 'inactive', 'churned'] as ClientStatus[]).map((status) => (
+                        <button
+                          key={status}
+                          onClick={() => {
+                            setStatusFilter(statusFilter === status ? null : status)
+                          }}
+                          className={`w-full px-3 py-2 text-left text-sm rounded-lg capitalize transition-colors ${
+                            statusFilter === status
+                              ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300'
+                              : 'hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'
+                          }`}
+                        >
+                          <span className={`inline-block w-2 h-2 rounded-full mr-2 ${
+                            status === 'lead' ? 'bg-yellow-500' :
+                            status === 'active' ? 'bg-green-500' :
+                            status === 'inactive' ? 'bg-slate-400' : 'bg-red-500'
+                          }`} />
+                          {status}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-2 block">Created</label>
+                    <div className="space-y-1">
+                      {([
+                        { value: 'today', label: 'Today' },
+                        { value: 'this_week', label: 'This Week' },
+                        { value: 'this_month', label: 'This Month' },
+                      ] as { value: DateFilter; label: string }[]).map((option) => (
+                        <button
+                          key={option.value}
+                          onClick={() => {
+                            setDateFilter(dateFilter === option.value ? null : option.value)
+                          }}
+                          className={`w-full px-3 py-2 text-left text-sm rounded-lg transition-colors ${
+                            dateFilter === option.value
+                              ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300'
+                              : 'hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -211,19 +448,70 @@ export function ClientsPage() {
       </div>
 
       {/* Active Filters */}
-      {statusFilter && (
-        <div className="flex items-center gap-2">
+      {(statusFilter || dateFilter) && (
+        <div className="flex items-center gap-2 flex-wrap">
           <span className="text-sm text-slate-500 dark:text-slate-400">Filtered by:</span>
-          <span className="inline-flex items-center gap-1 px-2 py-1 bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 rounded-full text-sm capitalize">
-            {statusFilter}
-            <button
-              onClick={() => setStatusFilter(null)}
-              className="hover:text-primary-900 dark:hover:text-primary-100"
-              aria-label="Clear filter"
-            >
-              <X className="h-3 w-3" />
-            </button>
+          {statusFilter && (
+            <span className="inline-flex items-center gap-1 px-2 py-1 bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 rounded-full text-sm capitalize">
+              {statusFilter}
+              <button
+                onClick={() => setStatusFilter(null)}
+                className="hover:text-primary-900 dark:hover:text-primary-100"
+                aria-label="Clear status filter"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          )}
+          {dateFilter && (
+            <span className="inline-flex items-center gap-1 px-2 py-1 bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 rounded-full text-sm">
+              {dateFilter === 'today' ? 'Created Today' : dateFilter === 'this_week' ? 'Created This Week' : 'Created This Month'}
+              <button
+                onClick={() => setDateFilter(null)}
+                className="hover:text-primary-900 dark:hover:text-primary-100"
+                aria-label="Clear date filter"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Success Message */}
+      {deleteSuccess && (
+        <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4 flex items-center gap-3">
+          <CheckSquare className="h-5 w-5 text-green-600 dark:text-green-400" />
+          <span className="text-sm font-medium text-green-700 dark:text-green-300">
+            {deleteSuccess}
           </span>
+        </div>
+      )}
+
+      {/* Bulk Action Bar */}
+      {selectedClients.size > 0 && (
+        <div className="bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800 rounded-lg p-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <CheckSquare className="h-5 w-5 text-primary-600 dark:text-primary-400" />
+            <span className="text-sm font-medium text-primary-700 dark:text-primary-300">
+              {selectedClients.size} selected
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={clearSelection}
+              className="btn-outline text-sm py-1.5"
+            >
+              Clear selection
+            </button>
+            <button
+              onClick={() => setIsDeleteModalOpen(true)}
+              className="btn-outline text-sm py-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 border-red-200 dark:border-red-800"
+            >
+              <Trash2 className="h-4 w-4 mr-1.5" />
+              Delete selected
+            </button>
+          </div>
         </div>
       )}
 
@@ -258,6 +546,23 @@ export function ClientsPage() {
           <table className="w-full min-w-[600px]">
             <thead className="bg-slate-50 dark:bg-slate-800/50">
               <tr>
+                <th className="px-4 py-3 w-12">
+                  <button
+                    onClick={toggleSelectAll}
+                    className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+                      isAllSelected
+                        ? 'bg-primary-600 border-primary-600 text-white'
+                        : isSomeSelected
+                        ? 'bg-primary-200 border-primary-400 dark:bg-primary-800 dark:border-primary-600'
+                        : 'border-slate-300 dark:border-slate-600 hover:border-primary-400 dark:hover:border-primary-500'
+                    }`}
+                    aria-label={isAllSelected ? 'Deselect all' : 'Select all'}
+                  >
+                    {(isAllSelected || isSomeSelected) && (
+                      <CheckSquare className="h-3 w-3" />
+                    )}
+                  </button>
+                </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                   Client
                 </th>
@@ -279,8 +584,25 @@ export function ClientsPage() {
               {filteredClients.map((client) => (
                 <tr
                   key={client.id}
-                  className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+                  className={`hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors ${
+                    selectedClients.has(client.id) ? 'bg-primary-50 dark:bg-primary-900/10' : ''
+                  }`}
                 >
+                  <td className="px-4 py-4 w-12">
+                    <button
+                      onClick={() => toggleClientSelection(client.id)}
+                      className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+                        selectedClients.has(client.id)
+                          ? 'bg-primary-600 border-primary-600 text-white'
+                          : 'border-slate-300 dark:border-slate-600 hover:border-primary-400 dark:hover:border-primary-500'
+                      }`}
+                      aria-label={selectedClients.has(client.id) ? 'Deselect client' : 'Select client'}
+                    >
+                      {selectedClients.has(client.id) && (
+                        <CheckSquare className="h-3 w-3" />
+                      )}
+                    </button>
+                  </td>
                   <td className="px-6 py-4">
                     <div className="flex items-start">
                       <div className="h-10 w-10 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center text-primary-600 dark:text-primary-400 font-medium flex-shrink-0">
@@ -401,6 +723,70 @@ export function ClientsPage() {
         onClose={() => setIsAddModalOpen(false)}
         onClientAdded={fetchClients}
       />
+
+      {/* Import Clients Modal */}
+      <ImportClientsModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        onImportComplete={fetchClients}
+      />
+
+      {/* Delete Confirmation Modal */}
+      {isDeleteModalOpen && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex min-h-full items-center justify-center p-4">
+            <div
+              className="fixed inset-0 bg-black/50 transition-opacity"
+              onClick={() => !isDeleting && setIsDeleteModalOpen(false)}
+            />
+            <div className="relative bg-white dark:bg-slate-800 rounded-lg shadow-xl max-w-md w-full p-6">
+              <div className="flex items-center gap-4 mb-4">
+                <div className="flex-shrink-0 w-12 h-12 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center">
+                  <AlertTriangle className="h-6 w-6 text-red-600 dark:text-red-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
+                    Delete {selectedClients.size} client{selectedClients.size > 1 ? 's' : ''}?
+                  </h3>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    This action cannot be undone.
+                  </p>
+                </div>
+              </div>
+              <p className="text-sm text-slate-600 dark:text-slate-300 mb-6">
+                Are you sure you want to permanently delete the selected client{selectedClients.size > 1 ? 's' : ''}?
+                All associated data including projects and tasks will also be removed.
+              </p>
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setIsDeleteModalOpen(false)}
+                  disabled={isDeleting}
+                  className="btn-outline"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleBulkDelete}
+                  disabled={isDeleting}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center"
+                >
+                  {isDeleting ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Deleting...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

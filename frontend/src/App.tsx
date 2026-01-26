@@ -16,6 +16,7 @@ import { ProjectsPage } from './pages/projects/ProjectsPage'
 import { ProjectDetailPage } from './pages/projects/ProjectDetailPage'
 import { TeamPage } from './pages/TeamPage'
 import { SettingsPage } from './pages/SettingsPage'
+import { OnboardingPage } from './pages/OnboardingPage'
 import { NotFoundPage } from './pages/NotFoundPage'
 
 function App() {
@@ -29,6 +30,16 @@ function App() {
             <Route path="/register" element={<RegisterPage />} />
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
             <Route path="/reset-password" element={<ResetPasswordPage />} />
+
+            {/* Onboarding route */}
+            <Route
+              path="/onboarding"
+              element={
+                <ProtectedRoute requireWorkspace={false}>
+                  <OnboardingPage />
+                </ProtectedRoute>
+              }
+            />
 
             {/* Protected routes */}
             <Route

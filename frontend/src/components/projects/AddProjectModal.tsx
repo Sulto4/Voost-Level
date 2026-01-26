@@ -41,6 +41,12 @@ export function AddProjectModal({ isOpen, onClose, client, onProjectAdded }: Add
       return
     }
 
+    // Validate date range
+    if (startDate && dueDate && new Date(startDate) > new Date(dueDate)) {
+      setError('Start date cannot be after due date')
+      return
+    }
+
     setLoading(true)
 
     const { error: insertError } = await supabase

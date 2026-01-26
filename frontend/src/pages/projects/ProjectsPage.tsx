@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Search, Filter, MoreHorizontal, Calendar, DollarSign, Building2 } from 'lucide-react'
+import { Plus, Search, Filter, MoreHorizontal, Calendar, DollarSign, Building2, AlertTriangle } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import type { Project, Client } from '../../types/database'
@@ -63,6 +63,16 @@ export function ProjectsPage() {
     review: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
     completed: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
     cancelled: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
+  }
+
+  // Helper function to check if a project is overdue
+  function isOverdue(project: ProjectWithClient): boolean {
+    if (!project.due_date) return false
+    if (project.status === 'completed' || project.status === 'cancelled') return false
+    const dueDate = new Date(project.due_date)
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    return dueDate < today
   }
 
   return (
@@ -155,7 +165,9 @@ export function ProjectsPage() {
               {filteredProjects.map((project) => (
                 <tr
                   key={project.id}
-                  className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+                  className={`hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors ${
+                    isOverdue(project) ? 'bg-red-50 dark:bg-red-900/10' : ''
+                  }`}
                 >
                   <td className="px-6 py-4">
                     <div>
@@ -197,14 +209,22 @@ export function ProjectsPage() {
                       {project.status.replace('_', ' ')}
                     </span>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 dark:text-slate-400">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm">
                     {project.due_date ? (
-                      <span className="flex items-center">
-                        <Calendar className="h-4 w-4 mr-1" />
+                      <span className={`flex items-center ${
+                        isOverdue(project)
+                          ? 'text-red-600 dark:text-red-400 font-medium'
+                          : 'text-slate-500 dark:text-slate-400'
+                      }`}>
+                        {isOverdue(project) ? (
+                          <AlertTriangle className="h-4 w-4 mr-1" />
+                        ) : (
+                          <Calendar className="h-4 w-4 mr-1" />
+                        )}
                         {new Date(project.due_date).toLocaleDateString()}
                       </span>
                     ) : (
-                      '-'
+                      <span className="text-slate-500 dark:text-slate-400">-</span>
                     )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 dark:text-slate-400">

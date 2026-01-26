@@ -1,0 +1,6 @@
+Name,Company,Email,Phone,Status,Value,Source,Website,Notes
+Import Test Client 1,Test Company 1,client1@test.com,+1-555-0001,lead,1000,Website,https://test1.com,First import test
+Import Test Client 2,Test Company 2,client2@test.com,+1-555-0002,active,2000,Referral,https://test2.com,Second import test
+Import Test Client 3,Test Company 3,client3@test.com,+1-555-0003,inactive,3000,LinkedIn,https://test3.com,Third import test
+Import Test Client 4,Test Company 4,client4@test.com,+1-555-0004,churned,4000,Google Ads,https://test4.com,Fourth import test
+Import Test Client 5,Test Company 5,client5@test.com,+1-555-0005,lead,5000,Cold Call,https://test5.com,Fifth import test

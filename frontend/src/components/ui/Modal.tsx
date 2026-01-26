@@ -1,4 +1,4 @@
-import { Fragment, ReactNode } from 'react'
+import { Fragment, ReactNode, useEffect } from 'react'
 import { X } from 'lucide-react'
 
 interface ModalProps {
@@ -10,6 +10,20 @@ interface ModalProps {
 }
 
 export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalProps) {
+  // Handle ESC key to close modal
+  useEffect(() => {
+    if (!isOpen) return
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        onClose()
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [isOpen, onClose])
+
   if (!isOpen) return null
 
   const sizeClasses = {
@@ -27,7 +41,7 @@ export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalPr
       />
 
       {/* Modal */}
-      <div className="fixed inset-0 z-50 overflow-y-auto">
+      <div className="fixed inset-0 z-50 overflow-y-auto" onClick={onClose}>
         <div className="flex min-h-full items-center justify-center p-4">
           <div
             className={`relative bg-white dark:bg-slate-800 rounded-xl shadow-xl w-full ${sizeClasses[size]} max-h-[calc(100vh-2rem)] flex flex-col transform transition-all`}

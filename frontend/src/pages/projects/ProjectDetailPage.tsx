@@ -1,19 +1,20 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Edit, Trash2, Plus, CheckSquare, Calendar, DollarSign, Building2, AlertCircle } from 'lucide-react'
+import { ArrowLeft, Edit, Trash2, Plus, CheckSquare, Calendar, DollarSign, Building2, AlertCircle, Flag, CheckCircle } from 'lucide-react'
 import { clsx } from 'clsx'
 import { supabase } from '../../lib/supabase'
 import { EditProjectModal } from '../../components/projects/EditProjectModal'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { AddTaskModal } from '../../components/tasks/AddTaskModal'
 import { EditTaskModal } from '../../components/tasks/EditTaskModal'
-import type { Project, Client, Task } from '../../types/database'
+import { AddMilestoneModal } from '../../components/milestones/AddMilestoneModal'
+import type { Project, Client, Task, Milestone } from '../../types/database'
 
 interface ProjectWithClient extends Project {
   clients: Pick<Client, 'id' | 'name' | 'company'> | null
 }
 
-const tabs = ['Overview', 'Tasks', 'Files']
+const tabs = ['Overview', 'Milestones', 'Tasks', 'Files']
 
 export function ProjectDetailPage() {
   const { id } = useParams()
@@ -31,11 +32,17 @@ export function ProjectDetailPage() {
   const [deletingTask, setDeletingTask] = useState(false)
   const [tasks, setTasks] = useState<Task[]>([])
   const [tasksLoading, setTasksLoading] = useState(false)
+  const [milestones, setMilestones] = useState<Milestone[]>([])
+  const [milestonesLoading, setMilestonesLoading] = useState(false)
+  const [isAddMilestoneModalOpen, setIsAddMilestoneModalOpen] = useState(false)
+  const [quickAddTaskTitle, setQuickAddTaskTitle] = useState('')
+  const [quickAddLoading, setQuickAddLoading] = useState(false)
 
   useEffect(() => {
     if (id) {
       fetchProject()
       fetchTasks()
+      fetchMilestones()
     }
   }, [id])
 
@@ -80,6 +87,40 @@ export function ProjectDetailPage() {
     setTasksLoading(false)
   }
 
+  async function fetchMilestones() {
+    if (!id) return
+    setMilestonesLoading(true)
+    const { data, error } = await supabase
+      .from('milestones')
+      .select('*')
+      .eq('project_id', id)
+      .order('due_date', { ascending: true, nullsFirst: false })
+
+    if (error) {
+      console.error('Error fetching milestones:', error)
+    } else {
+      setMilestones(data || [])
+    }
+    setMilestonesLoading(false)
+  }
+
+  async function toggleMilestoneComplete(milestone: Milestone) {
+    const newCompleted = !milestone.completed
+    const { error } = await supabase
+      .from('milestones')
+      .update({
+        completed: newCompleted,
+        completed_at: newCompleted ? new Date().toISOString() : null,
+      })
+      .eq('id', milestone.id)
+
+    if (error) {
+      console.error('Error updating milestone:', error)
+    } else {
+      fetchMilestones()
+    }
+  }
+
   async function handleDelete() {
     if (!project) return
 
@@ -116,6 +157,43 @@ export function ProjectDetailPage() {
       setSelectedTask(null)
       fetchTasks()
     }
+  }
+
+  async function toggleTaskStatus(task: Task) {
+    const newStatus = task.status === 'done' ? 'todo' : 'done'
+    const { error } = await supabase
+      .from('tasks')
+      .update({ status: newStatus })
+      .eq('id', task.id)
+
+    if (error) {
+      console.error('Error updating task status:', error)
+    } else {
+      fetchTasks()
+    }
+  }
+
+  async function handleQuickAddTask(e: React.FormEvent) {
+    e.preventDefault()
+    if (!quickAddTaskTitle.trim() || !id) return
+
+    setQuickAddLoading(true)
+    const { error } = await supabase
+      .from('tasks')
+      .insert({
+        project_id: id,
+        title: quickAddTaskTitle.trim(),
+        status: 'todo',
+        priority: 'medium',
+      })
+
+    if (error) {
+      console.error('Error creating task:', error)
+    } else {
+      setQuickAddTaskTitle('')
+      fetchTasks()
+    }
+    setQuickAddLoading(false)
   }
 
   const statusColors: Record<string, string> = {
@@ -332,6 +410,95 @@ export function ProjectDetailPage() {
             </div>
           </div>
         )}
+        {activeTab === 'Milestones' && (
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
+                Milestones ({milestones.length})
+              </h3>
+              <button
+                onClick={() => setIsAddMilestoneModalOpen(true)}
+                className="btn-primary text-sm"
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                Add Milestone
+              </button>
+            </div>
+            {milestonesLoading ? (
+              <div className="text-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+                <p className="mt-4 text-slate-500 dark:text-slate-400">Loading milestones...</p>
+              </div>
+            ) : milestones.length === 0 ? (
+              <div className="text-center py-8 text-slate-500 dark:text-slate-400">
+                <Flag className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                <p>No milestones yet</p>
+                <p className="text-sm">Create milestones to track project progress</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {milestones.map((milestone) => (
+                  <div
+                    key={milestone.id}
+                    className={`p-4 border rounded-lg transition-colors ${
+                      milestone.completed
+                        ? 'border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20'
+                        : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-start gap-3">
+                        <button
+                          onClick={() => toggleMilestoneComplete(milestone)}
+                          className={`mt-0.5 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${
+                            milestone.completed
+                              ? 'bg-green-500 border-green-500 text-white'
+                              : 'border-slate-300 dark:border-slate-600 hover:border-green-400 dark:hover:border-green-500'
+                          }`}
+                        >
+                          {milestone.completed && <CheckCircle className="h-4 w-4" />}
+                        </button>
+                        <div>
+                          <h4 className={`font-medium ${
+                            milestone.completed
+                              ? 'text-green-700 dark:text-green-400 line-through'
+                              : 'text-slate-900 dark:text-white'
+                          }`}>
+                            <Flag className="h-4 w-4 inline mr-1.5 -mt-0.5" />
+                            {milestone.name}
+                          </h4>
+                          {milestone.description && (
+                            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                              {milestone.description}
+                            </p>
+                          )}
+                          <div className="flex items-center gap-3 mt-2">
+                            {milestone.due_date && (
+                              <span className={`text-xs flex items-center ${
+                                !milestone.completed && new Date(milestone.due_date) < new Date()
+                                  ? 'text-red-600 dark:text-red-400'
+                                  : 'text-slate-500 dark:text-slate-400'
+                              }`}>
+                                <Calendar className="h-3 w-3 mr-1" />
+                                {new Date(milestone.due_date).toLocaleDateString()}
+                              </span>
+                            )}
+                            {milestone.completed && milestone.completed_at && (
+                              <span className="text-xs text-green-600 dark:text-green-400 flex items-center">
+                                <CheckCircle className="h-3 w-3 mr-1" />
+                                Completed {new Date(milestone.completed_at).toLocaleDateString()}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
         {activeTab === 'Tasks' && (
           <div>
             <div className="flex items-center justify-between mb-4">
@@ -346,6 +513,22 @@ export function ProjectDetailPage() {
                 Add Task
               </button>
             </div>
+            {/* Quick Add Task Input */}
+            <form onSubmit={handleQuickAddTask} className="mb-4">
+              <div className="flex items-center gap-2">
+                <div className="flex-1 relative">
+                  <Plus className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <input
+                    type="text"
+                    value={quickAddTaskTitle}
+                    onChange={(e) => setQuickAddTaskTitle(e.target.value)}
+                    placeholder="Quick add task... (press Enter)"
+                    className="input pl-10 text-sm"
+                    disabled={quickAddLoading}
+                  />
+                </div>
+              </div>
+            </form>
             {tasksLoading ? (
               <div className="text-center py-8">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
@@ -366,15 +549,19 @@ export function ProjectDetailPage() {
                   >
                     <div className="flex items-start justify-between">
                       <div className="flex items-start gap-3">
-                        <div className={`mt-1 w-4 h-4 rounded border-2 flex items-center justify-center ${
-                          task.status === 'done'
-                            ? 'bg-green-500 border-green-500'
-                            : 'border-slate-300 dark:border-slate-600'
-                        }`}>
+                        <button
+                          onClick={() => toggleTaskStatus(task)}
+                          className={`mt-1 w-5 h-5 rounded border-2 flex items-center justify-center transition-colors cursor-pointer ${
+                            task.status === 'done'
+                              ? 'bg-green-500 border-green-500 hover:bg-green-600 hover:border-green-600'
+                              : 'border-slate-300 dark:border-slate-600 hover:border-green-400 dark:hover:border-green-500'
+                          }`}
+                          aria-label={task.status === 'done' ? 'Mark task as incomplete' : 'Mark task as complete'}
+                        >
                           {task.status === 'done' && (
                             <CheckSquare className="h-3 w-3 text-white" />
                           )}
-                        </div>
+                        </button>
                         <div>
                           <h4 className={`font-medium text-slate-900 dark:text-white ${
                             task.status === 'done' ? 'line-through text-slate-500' : ''
@@ -402,12 +589,29 @@ export function ProjectDetailPage() {
                               {task.priority === 'high' && <AlertCircle className="h-3 w-3 mr-1" />}
                               {task.priority}
                             </span>
-                            {task.due_date && (
-                              <span className="text-xs text-slate-500 dark:text-slate-400 flex items-center">
-                                <Calendar className="h-3 w-3 mr-1" />
-                                {new Date(task.due_date).toLocaleDateString()}
-                              </span>
-                            )}
+                            {task.due_date && (() => {
+                              const dueDate = new Date(task.due_date)
+                              const today = new Date()
+                              today.setHours(0, 0, 0, 0)
+                              dueDate.setHours(0, 0, 0, 0)
+                              const isOverdue = dueDate < today && task.status !== 'done'
+                              const isDueToday = dueDate.getTime() === today.getTime() && task.status !== 'done'
+
+                              return (
+                                <span className={`text-xs flex items-center ${
+                                  isOverdue ? 'text-red-600 dark:text-red-400 font-medium' :
+                                  isDueToday ? 'text-amber-600 dark:text-amber-400 font-medium' :
+                                  'text-slate-500 dark:text-slate-400'
+                                }`}>
+                                  <Calendar className={`h-3 w-3 mr-1 ${
+                                    isOverdue ? 'text-red-600 dark:text-red-400' :
+                                    isDueToday ? 'text-amber-600 dark:text-amber-400' : ''
+                                  }`} />
+                                  {isOverdue ? 'Overdue: ' : isDueToday ? 'Due Today: ' : ''}
+                                  {dueDate.toLocaleDateString()}
+                                </span>
+                              )
+                            })()}
                           </div>
                         </div>
                       </div>
@@ -498,6 +702,15 @@ export function ProjectDetailPage() {
         confirmText="Delete"
         variant="danger"
         loading={deletingTask}
+      />
+
+      {/* Add Milestone Modal */}
+      <AddMilestoneModal
+        isOpen={isAddMilestoneModalOpen}
+        onClose={() => setIsAddMilestoneModalOpen(false)}
+        projectId={project.id}
+        projectName={project.name}
+        onMilestoneAdded={fetchMilestones}
       />
     </div>
   )

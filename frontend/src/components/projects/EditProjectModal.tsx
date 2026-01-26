@@ -50,6 +50,12 @@ export function EditProjectModal({ isOpen, onClose, project, onProjectUpdated }:
       return
     }
 
+    // Validate date range
+    if (startDate && dueDate && new Date(startDate) > new Date(dueDate)) {
+      setError('Start date cannot be after due date')
+      return
+    }
+
     setLoading(true)
 
     const { error: updateError } = await supabase

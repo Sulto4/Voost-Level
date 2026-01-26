@@ -16,6 +16,8 @@ import {
 import { useWorkspace } from '../../context/WorkspaceContext'
 import { useAuth } from '../../context/AuthContext'
 import { CreateWorkspaceModal } from '../workspace/CreateWorkspaceModal'
+import { QuickAddMenu } from '../quick-add/QuickAddMenu'
+import { AddClientModal } from '../clients/AddClientModal'
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -31,6 +33,7 @@ export function Sidebar() {
   const { profile } = useAuth()
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
+  const [isAddClientModalOpen, setIsAddClientModalOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
   // Close dropdown when clicking outside
@@ -140,10 +143,9 @@ export function Sidebar() {
 
           {/* Quick Add Button */}
           <div className="p-4 border-t border-slate-200 dark:border-slate-700">
-            <button className="w-full btn-primary flex items-center justify-center">
-              <Plus className="h-5 w-5 mr-2" />
-              Quick Add
-            </button>
+            <QuickAddMenu
+              onAddClient={() => setIsAddClientModalOpen(true)}
+            />
           </div>
 
           {/* User Profile */}
@@ -169,6 +171,12 @@ export function Sidebar() {
       <CreateWorkspaceModal
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
+      />
+
+      {/* Add Client Modal */}
+      <AddClientModal
+        isOpen={isAddClientModalOpen}
+        onClose={() => setIsAddClientModalOpen(false)}
       />
     </>
   )

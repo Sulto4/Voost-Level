@@ -1,0 +1,3 @@
+Company,Email,Phone,Status,Value,Source
+Test Company 1,badclient@test.com,+1-555-0001,lead,1000,Website
+Test Company 2,badclient2@test.com,+1-555-0002,active,2000,Referral
