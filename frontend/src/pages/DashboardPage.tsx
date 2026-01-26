@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { Users, FolderKanban, DollarSign, TrendingUp, MessageSquare, Phone, Mail, Calendar, CheckSquare, ArrowRightLeft, ChevronDown } from 'lucide-react'
+import { Users, FolderKanban, DollarSign, TrendingUp, MessageSquare, Phone, Mail, Calendar, CheckSquare, ArrowRightLeft, ChevronDown, Settings2, X, GripVertical } from 'lucide-react'
 import { clsx } from 'clsx'
 import { supabase } from '../lib/supabase'
 import { useWorkspace } from '../context/WorkspaceContext'
@@ -8,6 +8,41 @@ import { StatCardSkeleton, CardSkeleton } from '../components/ui/Skeleton'
 import type { Activity, Client, Profile } from '../types/database'
 
 type DateRange = '7d' | '30d' | '90d' | 'year' | 'all'
+
+type WidgetId = 'stats' | 'recentActivity' | 'pipelineOverview'
+
+interface WidgetConfig {
+  id: WidgetId
+  name: string
+  visible: boolean
+}
+
+const DEFAULT_WIDGETS: WidgetConfig[] = [
+  { id: 'stats', name: 'Statistics Cards', visible: true },
+  { id: 'recentActivity', name: 'Recent Activity', visible: true },
+  { id: 'pipelineOverview', name: 'Pipeline Overview', visible: true },
+]
+
+function loadWidgetConfig(): WidgetConfig[] {
+  try {
+    const saved = localStorage.getItem('dashboard-widgets')
+    if (saved) {
+      const parsed = JSON.parse(saved)
+      // Ensure all widgets exist (in case new ones are added)
+      return DEFAULT_WIDGETS.map(defaultWidget => {
+        const savedWidget = parsed.find((w: WidgetConfig) => w.id === defaultWidget.id)
+        return savedWidget || defaultWidget
+      })
+    }
+  } catch (e) {
+    console.error('Error loading widget config:', e)
+  }
+  return DEFAULT_WIDGETS
+}
+
+function saveWidgetConfig(widgets: WidgetConfig[]) {
+  localStorage.setItem('dashboard-widgets', JSON.stringify(widgets))
+}
 
 interface ActivityWithDetails extends Activity {
   client?: Client | null
@@ -19,6 +54,8 @@ export function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [dateRange, setDateRange] = useState<DateRange>('30d')
   const [isDateRangeDropdownOpen, setIsDateRangeDropdownOpen] = useState(false)
+  const [isCustomizeOpen, setIsCustomizeOpen] = useState(false)
+  const [widgets, setWidgets] = useState<WidgetConfig[]>(loadWidgetConfig)
   const [stats, setStats] = useState({
     totalClients: 0,
     activeProjects: 0,
@@ -112,6 +149,20 @@ export function DashboardPage() {
       fetchDashboardStats()
     }
   }, [currentWorkspace, dateRange])
+
+  // Toggle widget visibility
+  function toggleWidget(widgetId: WidgetId) {
+    const updated = widgets.map(w =>
+      w.id === widgetId ? { ...w, visible: !w.visible } : w
+    )
+    setWidgets(updated)
+    saveWidgetConfig(updated)
+  }
+
+  // Check if widget is visible
+  function isWidgetVisible(widgetId: WidgetId): boolean {
+    return widgets.find(w => w.id === widgetId)?.visible ?? true
+  }
 
   async function fetchDashboardStats() {
     if (!currentWorkspace) return
@@ -415,78 +466,94 @@ export function DashboardPage() {
           </p>
         </div>
 
-        {/* Date Range Selector */}
-        <div className="relative">
+        {/* Actions */}
+        <div className="flex items-center gap-2">
+          {/* Customize Button */}
           <button
-            onClick={() => setIsDateRangeDropdownOpen(!isDateRangeDropdownOpen)}
+            onClick={() => setIsCustomizeOpen(true)}
             className="btn-outline flex items-center gap-2"
+            title="Customize Dashboard"
           >
-            <Calendar className="h-4 w-4" />
-            {selectedDateRange.label}
-            <ChevronDown className={clsx(
-              'h-4 w-4 transition-transform',
-              isDateRangeDropdownOpen && 'rotate-180'
-            )} />
+            <Settings2 className="h-4 w-4" />
+            <span className="hidden sm:inline">Customize</span>
           </button>
 
-          {isDateRangeDropdownOpen && (
-            <div className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg z-50">
-              {dateRangeOptions.map(option => (
-                <button
-                  key={option.value}
-                  onClick={() => {
-                    setDateRange(option.value)
-                    setIsDateRangeDropdownOpen(false)
-                  }}
-                  className={clsx(
-                    'w-full text-left px-4 py-2.5 text-sm transition-colors first:rounded-t-lg last:rounded-b-lg',
-                    dateRange === option.value
-                      ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300'
-                      : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
-                  )}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-          )}
+          {/* Date Range Selector */}
+          <div className="relative">
+            <button
+              onClick={() => setIsDateRangeDropdownOpen(!isDateRangeDropdownOpen)}
+              className="btn-outline flex items-center gap-2"
+            >
+              <Calendar className="h-4 w-4" />
+              {selectedDateRange.label}
+              <ChevronDown className={clsx(
+                'h-4 w-4 transition-transform',
+                isDateRangeDropdownOpen && 'rotate-180'
+              )} />
+            </button>
+
+            {isDateRangeDropdownOpen && (
+              <div className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg z-50">
+                {dateRangeOptions.map(option => (
+                  <button
+                    key={option.value}
+                    onClick={() => {
+                      setDateRange(option.value)
+                      setIsDateRangeDropdownOpen(false)
+                    }}
+                    className={clsx(
+                      'w-full text-left px-4 py-2.5 text-sm transition-colors first:rounded-t-lg last:rounded-b-lg',
+                      dateRange === option.value
+                        ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300'
+                        : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
+                    )}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {statsDisplay.map((stat) => (
-          <div key={stat.name} className="card p-6">
-            <div className="flex items-center justify-between">
-              <div className="p-2 bg-primary-50 dark:bg-primary-900/20 rounded-lg">
-                <stat.icon className="h-5 w-5 text-primary-600 dark:text-primary-400" />
+      {isWidgetVisible('stats') && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {statsDisplay.map((stat) => (
+            <div key={stat.name} className="card p-6">
+              <div className="flex items-center justify-between">
+                <div className="p-2 bg-primary-50 dark:bg-primary-900/20 rounded-lg">
+                  <stat.icon className="h-5 w-5 text-primary-600 dark:text-primary-400" />
+                </div>
+                {stat.change && (
+                  <span className={clsx(
+                    'text-sm font-medium',
+                    stat.isPositive
+                      ? 'text-green-600 dark:text-green-400'
+                      : 'text-red-600 dark:text-red-400'
+                  )}>
+                    {stat.change}
+                  </span>
+                )}
               </div>
-              {stat.change && (
-                <span className={clsx(
-                  'text-sm font-medium',
-                  stat.isPositive
-                    ? 'text-green-600 dark:text-green-400'
-                    : 'text-red-600 dark:text-red-400'
-                )}>
-                  {stat.change}
-                </span>
-              )}
+              <div className="mt-4">
+                <p className="text-2xl font-bold text-slate-900 dark:text-white">
+                  {stat.value}
+                </p>
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  {stat.name}
+                </p>
+              </div>
             </div>
-            <div className="mt-4">
-              <p className="text-2xl font-bold text-slate-900 dark:text-white">
-                {stat.value}
-              </p>
-              <p className="text-sm text-slate-500 dark:text-slate-400">
-                {stat.name}
-              </p>
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       {/* Recent Activity & Pipeline Overview */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Recent Activity */}
+        {isWidgetVisible('recentActivity') && (
         <div className="card p-6">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">
             Recent Activity
@@ -530,8 +597,10 @@ export function DashboardPage() {
             </div>
           )}
         </div>
+        )}
 
         {/* Pipeline Overview */}
+        {isWidgetVisible('pipelineOverview') && (
         <div className="card p-6">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">
             Pipeline Overview
@@ -562,7 +631,60 @@ export function DashboardPage() {
             </div>
           )}
         </div>
+        )}
       </div>
+
+      {/* Customize Modal */}
+      {isCustomizeOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setIsCustomizeOpen(false)} />
+          <div className="relative bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-md mx-4 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
+                Customize Dashboard
+              </h3>
+              <button
+                onClick={() => setIsCustomizeOpen(false)}
+                className="p-2 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
+              Choose which widgets to display on your dashboard.
+            </p>
+            <div className="space-y-3">
+              {widgets.map(widget => (
+                <label
+                  key={widget.id}
+                  className="flex items-center gap-3 p-3 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50 cursor-pointer transition-colors"
+                >
+                  <input
+                    type="checkbox"
+                    checked={widget.visible}
+                    onChange={() => toggleWidget(widget.id)}
+                    className="h-4 w-4 rounded border-slate-300 dark:border-slate-600 text-primary-600 focus:ring-primary-500"
+                  />
+                  <div className="flex items-center gap-2 flex-1">
+                    <GripVertical className="h-4 w-4 text-slate-400" />
+                    <span className="text-sm font-medium text-slate-900 dark:text-white">
+                      {widget.name}
+                    </span>
+                  </div>
+                </label>
+              ))}
+            </div>
+            <div className="mt-6 flex justify-end">
+              <button
+                onClick={() => setIsCustomizeOpen(false)}
+                className="btn-primary"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Empty State Prompt - only show if no clients */}
       {stats.totalClients === 0 && (
