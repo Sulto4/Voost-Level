@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Edit, Trash2, Mail, Phone, Globe, Building2, Plus, Calendar, DollarSign, MessageSquare, Users, CheckSquare } from 'lucide-react'
 import { clsx } from 'clsx'
 import { supabase } from '../../lib/supabase'
+import { formatRelativeTime } from '../../lib/dateUtils'
 import { EditClientModal } from '../../components/clients/EditClientModal'
 import { AddProjectModal } from '../../components/projects/AddProjectModal'
 import { EditProjectModal } from '../../components/projects/EditProjectModal'
@@ -489,14 +490,8 @@ export function ClientDetailPage() {
                             {activity.content}
                           </p>
                         )}
-                        <p className="text-xs text-slate-400 dark:text-slate-500 mt-2">
-                          {new Date(activity.created_at).toLocaleString('en-US', {
-                            month: 'short',
-                            day: 'numeric',
-                            year: 'numeric',
-                            hour: 'numeric',
-                            minute: '2-digit',
-                          })}
+                        <p className="text-xs text-slate-400 dark:text-slate-500 mt-2" title={new Date(activity.created_at).toLocaleString()}>
+                          {formatRelativeTime(activity.created_at)}
                         </p>
                       </div>
                     </div>
