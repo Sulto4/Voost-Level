@@ -5,7 +5,11 @@ import { useAuth } from '../../context/AuthContext'
 import { useTheme } from '../../context/ThemeContext'
 import { clsx } from 'clsx'
 
-export function Header() {
+interface HeaderProps {
+  onMenuClick?: () => void
+}
+
+export function Header({ onMenuClick }: HeaderProps) {
   const { profile, signOut } = useAuth()
   const { theme, toggleTheme } = useTheme()
   const navigate = useNavigate()
@@ -21,7 +25,11 @@ export function Header() {
     <header className="sticky top-0 z-40 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">
       <div className="flex items-center justify-between h-16 px-4 sm:px-6">
         {/* Mobile menu button */}
-        <button className="lg:hidden icon-btn">
+        <button
+          onClick={onMenuClick}
+          className="lg:hidden icon-btn"
+          aria-label="Open menu"
+        >
           <Menu className="h-6 w-6" />
         </button>
 
