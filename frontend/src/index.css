@@ -384,6 +384,78 @@
   }
 }
 
+/* Reduced Motion Support */
+@media (prefers-reduced-motion: reduce) {
+  /* Disable all animations and transitions globally */
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* Ensure smooth scrolling is disabled */
+  html {
+    scroll-behavior: auto !important;
+  }
+
+  /* Disable specific animation utilities */
+  .animate-fade-in,
+  .animate-slide-in,
+  .animate-slide-in-right,
+  .animate-slide-out-right {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  /* Ensure modals and dialogs appear instantly */
+  [role="dialog"],
+  [role="alertdialog"],
+  .modal {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  /* Disable hover scale effects on buttons */
+  .btn:active,
+  .btn-primary:active,
+  .btn-secondary:active,
+  .btn-outline:active,
+  .btn-ghost:active,
+  .btn-danger:active {
+    transform: none !important;
+  }
+
+  /* Sidebar collapse/expand should be instant */
+  aside,
+  [role="complementary"] {
+    transition: none !important;
+  }
+
+  /* Toast notifications appear instantly */
+  .toast,
+  [role="alert"] {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  /* Dropdown menus appear instantly */
+  [role="menu"],
+  [role="listbox"] {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  /* Loading spinners - keep spinning but reduce speed perception */
+  .animate-spin {
+    animation-duration: 1.5s !important;
+    animation-iteration-count: infinite !important;
+  }
+}
+
 /* Additional high contrast preference support */
 @media (prefers-contrast: more) {
   /* Increase border visibility */
