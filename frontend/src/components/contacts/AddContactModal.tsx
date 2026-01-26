@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Modal } from '../ui/Modal'
 import { supabase } from '../../lib/supabase'
 import { useWorkspace } from '../../context/WorkspaceContext'
@@ -16,6 +16,7 @@ export function AddContactModal({ isOpen, onClose, clientId, onContactAdded }: A
   const { currentWorkspace } = useWorkspace()
   const toast = useToast()
   const [loading, setLoading] = useState(false)
+  const [hasExistingContacts, setHasExistingContacts] = useState(true) // Assume true until checked
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -24,6 +25,29 @@ export function AddContactModal({ isOpen, onClose, clientId, onContactAdded }: A
     is_primary: false,
     notes: '',
   })
+
+  // Check if client has existing contacts when modal opens
+  useEffect(() => {
+    async function checkExistingContacts() {
+      if (!isOpen || !clientId) return
+
+      const { count, error } = await supabase
+        .from('client_contacts')
+        .select('id', { count: 'exact', head: true })
+        .eq('client_id', clientId)
+
+      if (!error) {
+        const hasContacts = (count || 0) > 0
+        setHasExistingContacts(hasContacts)
+        // Auto-select primary if this is the first contact
+        if (!hasContacts) {
+          setFormData(prev => ({ ...prev, is_primary: true }))
+        }
+      }
+    }
+
+    checkExistingContacts()
+  }, [isOpen, clientId])
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) {
     const { name, value, type } = e.target
@@ -82,6 +106,7 @@ export function AddContactModal({ isOpen, onClose, clientId, onContactAdded }: A
       is_primary: false,
       notes: '',
     })
+    setHasExistingContacts(true) // Reset for next open
     onClose()
   }
 
@@ -157,10 +182,16 @@ export function AddContactModal({ isOpen, onClose, clientId, onContactAdded }: A
             type="checkbox"
             checked={formData.is_primary}
             onChange={handleChange}
-            className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
+            className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500 disabled:opacity-50"
+            disabled={!hasExistingContacts}
           />
           <label htmlFor="contactPrimary" className="text-sm text-slate-700 dark:text-slate-300">
             Primary Contact
+            {!hasExistingContacts && (
+              <span className="ml-2 text-xs text-slate-500 dark:text-slate-400">
+                (Auto-selected as first contact)
+              </span>
+            )}
           </label>
         </div>
 
