@@ -49,6 +49,7 @@ export function ProjectDetailPage() {
   const [subtaskTitle, setSubtaskTitle] = useState('')
   const [addingSubtask, setAddingSubtask] = useState(false)
   const [taskAssigneeFilter, setTaskAssigneeFilter] = useState<string | null>(null) // null = all, 'unassigned' = unassigned, or user ID
+  const [taskPriorityFilter, setTaskPriorityFilter] = useState<string | null>(null) // null = all, or 'low' | 'medium' | 'high'
   const [isTaskFilterDropdownOpen, setIsTaskFilterDropdownOpen] = useState(false)
 
   useEffect(() => {
@@ -382,11 +383,26 @@ export function ProjectDetailPage() {
     !task.assigned_to || task.subtasks?.some(s => !s.assigned_to)
   )
 
-  // Filter tasks by assignee
+  // Priority filter options
+  const priorityOptions = [
+    { value: 'high', label: 'High', color: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300' },
+    { value: 'medium', label: 'Medium', color: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300' },
+    { value: 'low', label: 'Low', color: 'bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-300' },
+  ]
+
+  // Count active task filters
+  const activeTaskFilterCount = (taskAssigneeFilter ? 1 : 0) + (taskPriorityFilter ? 1 : 0)
+
+  // Filter tasks by assignee and priority
   const filteredTasks = tasks.filter(task => {
-    if (!taskAssigneeFilter) return true // No filter = show all
-    if (taskAssigneeFilter === 'unassigned') return !task.assigned_to
-    return task.assigned_to === taskAssigneeFilter
+    // Assignee filter
+    if (taskAssigneeFilter) {
+      if (taskAssigneeFilter === 'unassigned' && task.assigned_to) return false
+      if (taskAssigneeFilter !== 'unassigned' && task.assigned_to !== taskAssigneeFilter) return false
+    }
+    // Priority filter
+    if (taskPriorityFilter && task.priority !== taskPriorityFilter) return false
+    return true
   })
 
   const statusColors: Record<string, string> = {
@@ -696,21 +712,22 @@ export function ProjectDetailPage() {
           <div>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
-                Tasks ({filteredTasks.length}{taskAssigneeFilter ? ` of ${tasks.length}` : ''})
+                Tasks ({filteredTasks.length}{activeTaskFilterCount > 0 ? ` of ${tasks.length}` : ''})
               </h3>
               <div className="flex items-center gap-2">
-                {/* Assignee Filter */}
+                {/* Task Filters Dropdown */}
                 <div className="relative">
                   <button
                     onClick={() => setIsTaskFilterDropdownOpen(!isTaskFilterDropdownOpen)}
-                    className={`btn-outline text-sm ${taskAssigneeFilter ? 'ring-2 ring-primary-500' : ''}`}
+                    className={`btn-outline text-sm ${activeTaskFilterCount > 0 ? 'ring-2 ring-primary-500' : ''}`}
                   >
                     <Filter className="h-4 w-4 mr-1" />
-                    {taskAssigneeFilter === 'unassigned'
-                      ? 'Unassigned'
-                      : taskAssigneeFilter
-                        ? uniqueAssignees.find(a => a.id === taskAssigneeFilter)?.name || 'Filter'
-                        : 'Filter by Assignee'}
+                    Filters
+                    {activeTaskFilterCount > 0 && (
+                      <span className="ml-1 px-1.5 py-0.5 text-xs bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 rounded">
+                        {activeTaskFilterCount}
+                      </span>
+                    )}
                   </button>
 
                   {isTaskFilterDropdownOpen && (
@@ -719,59 +736,104 @@ export function ProjectDetailPage() {
                         className="fixed inset-0 z-10"
                         onClick={() => setIsTaskFilterDropdownOpen(false)}
                       />
-                      <div className="absolute right-0 top-full mt-2 w-56 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg z-20">
-                        <div className="p-2 border-b border-slate-200 dark:border-slate-700">
-                          <button
-                            onClick={() => {
-                              setTaskAssigneeFilter(null)
-                              setIsTaskFilterDropdownOpen(false)
-                            }}
-                            className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
-                              !taskAssigneeFilter
-                                ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300'
-                                : 'hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'
-                            }`}
-                          >
-                            All Tasks
-                          </button>
+                      <div className="absolute right-0 top-full mt-2 w-64 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg z-20">
+                        {/* Priority Filter Section */}
+                        <div className="p-3 border-b border-slate-200 dark:border-slate-700">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm font-medium text-slate-900 dark:text-white">Priority</span>
+                            {taskPriorityFilter && (
+                              <button
+                                onClick={() => setTaskPriorityFilter(null)}
+                                className="text-xs text-primary-600 hover:text-primary-700 dark:text-primary-400"
+                              >
+                                Clear
+                              </button>
+                            )}
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {priorityOptions.map((priority) => (
+                              <button
+                                key={priority.value}
+                                onClick={() => setTaskPriorityFilter(taskPriorityFilter === priority.value ? null : priority.value)}
+                                className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                                  taskPriorityFilter === priority.value
+                                    ? priority.color
+                                    : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
+                                }`}
+                              >
+                                {priority.label}
+                              </button>
+                            ))}
+                          </div>
                         </div>
-                        {hasUnassignedTasks && (
-                          <div className="p-2 border-b border-slate-200 dark:border-slate-700">
+
+                        {/* Assignee Filter Section */}
+                        <div className="p-3 border-b border-slate-200 dark:border-slate-700">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm font-medium text-slate-900 dark:text-white">Assignee</span>
+                            {taskAssigneeFilter && (
+                              <button
+                                onClick={() => setTaskAssigneeFilter(null)}
+                                className="text-xs text-primary-600 hover:text-primary-700 dark:text-primary-400"
+                              >
+                                Clear
+                              </button>
+                            )}
+                          </div>
+                          <div className="space-y-1">
                             <button
-                              onClick={() => {
-                                setTaskAssigneeFilter('unassigned')
-                                setIsTaskFilterDropdownOpen(false)
-                              }}
-                              className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
-                                taskAssigneeFilter === 'unassigned'
+                              onClick={() => setTaskAssigneeFilter(taskAssigneeFilter === null ? null : null)}
+                              className={`w-full text-left px-2.5 py-1.5 rounded-lg text-sm transition-colors ${
+                                !taskAssigneeFilter
                                   ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300'
                                   : 'hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'
                               }`}
                             >
-                              <User className="h-4 w-4 inline mr-2 opacity-50" />
-                              Unassigned
+                              All
                             </button>
-                          </div>
-                        )}
-                        {uniqueAssignees.length > 0 && (
-                          <div className="max-h-48 overflow-y-auto p-2">
+                            {hasUnassignedTasks && (
+                              <button
+                                onClick={() => setTaskAssigneeFilter('unassigned')}
+                                className={`w-full text-left px-2.5 py-1.5 rounded-lg text-sm transition-colors ${
+                                  taskAssigneeFilter === 'unassigned'
+                                    ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300'
+                                    : 'hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'
+                                }`}
+                              >
+                                <User className="h-3.5 w-3.5 inline mr-1.5 opacity-50" />
+                                Unassigned
+                              </button>
+                            )}
                             {uniqueAssignees.map((assignee) => (
                               <button
                                 key={assignee.id}
-                                onClick={() => {
-                                  setTaskAssigneeFilter(assignee.id)
-                                  setIsTaskFilterDropdownOpen(false)
-                                }}
-                                className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
+                                onClick={() => setTaskAssigneeFilter(assignee.id)}
+                                className={`w-full text-left px-2.5 py-1.5 rounded-lg text-sm transition-colors ${
                                   taskAssigneeFilter === assignee.id
                                     ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300'
                                     : 'hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'
                                 }`}
                               >
-                                <User className="h-4 w-4 inline mr-2" />
+                                <User className="h-3.5 w-3.5 inline mr-1.5" />
                                 {assignee.name}
                               </button>
                             ))}
+                          </div>
+                        </div>
+
+                        {/* Clear All Button */}
+                        {activeTaskFilterCount > 0 && (
+                          <div className="p-2">
+                            <button
+                              onClick={() => {
+                                setTaskAssigneeFilter(null)
+                                setTaskPriorityFilter(null)
+                                setIsTaskFilterDropdownOpen(false)
+                              }}
+                              className="w-full px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                            >
+                              Clear all filters
+                            </button>
                           </div>
                         )}
                       </div>
@@ -788,22 +850,36 @@ export function ProjectDetailPage() {
               </div>
             </div>
             {/* Active Filter Display */}
-            {taskAssigneeFilter && (
-              <div className="flex items-center gap-2 mb-4">
+            {activeTaskFilterCount > 0 && (
+              <div className="flex items-center gap-2 mb-4 flex-wrap">
                 <span className="text-sm text-slate-500 dark:text-slate-400">Filtering by:</span>
-                <span className="inline-flex items-center gap-1 px-2 py-1 bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300 text-sm rounded-full">
-                  <User className="h-3 w-3" />
-                  {taskAssigneeFilter === 'unassigned'
-                    ? 'Unassigned'
-                    : uniqueAssignees.find(a => a.id === taskAssigneeFilter)?.name}
-                  <button
-                    onClick={() => setTaskAssigneeFilter(null)}
-                    className="ml-1 hover:text-primary-900 dark:hover:text-primary-100"
-                    aria-label="Clear filter"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </span>
+                {taskPriorityFilter && (
+                  <span className={`inline-flex items-center gap-1 px-2 py-1 text-sm rounded-full ${priorityOptions.find(p => p.value === taskPriorityFilter)?.color}`}>
+                    {priorityOptions.find(p => p.value === taskPriorityFilter)?.label} priority
+                    <button
+                      onClick={() => setTaskPriorityFilter(null)}
+                      className="ml-1 hover:opacity-70"
+                      aria-label="Clear priority filter"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                )}
+                {taskAssigneeFilter && (
+                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300 text-sm rounded-full">
+                    <User className="h-3 w-3" />
+                    {taskAssigneeFilter === 'unassigned'
+                      ? 'Unassigned'
+                      : uniqueAssignees.find(a => a.id === taskAssigneeFilter)?.name}
+                    <button
+                      onClick={() => setTaskAssigneeFilter(null)}
+                      className="ml-1 hover:text-primary-900 dark:hover:text-primary-100"
+                      aria-label="Clear assignee filter"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                )}
               </div>
             )}
             {/* Quick Add Task Input */}
