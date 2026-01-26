@@ -5,6 +5,7 @@ import { WorkspaceProvider } from './context/WorkspaceContext'
 import { ToastProvider } from './context/ToastContext'
 import { ToastContainer } from './components/ui/Toast'
 import { CommandPalette, useCommandPalette } from './components/ui/CommandPalette'
+import { InactivityWarning } from './components/ui/InactivityWarning'
 import { ProtectedRoute } from './components/auth/ProtectedRoute'
 import { Layout } from './components/layout/Layout'
 import { LoginPage } from './pages/auth/LoginPage'
@@ -73,6 +74,7 @@ function AppContent() {
       </Routes>
       <ToastContainer />
       <CommandPalette isOpen={commandPalette.isOpen} onClose={commandPalette.close} />
+      <InactivityWarning />
     </>
   )
 }
