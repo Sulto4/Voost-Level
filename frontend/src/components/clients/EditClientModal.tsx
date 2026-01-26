@@ -158,7 +158,17 @@ export function EditClientModal({ isOpen, onClose, client, onClientUpdated }: Ed
       .eq('id', client.id)
 
     if (updateError) {
-      setError(updateError.message || 'Failed to update client')
+      // Detect network/connection errors
+      const errorMsg = updateError.message?.toLowerCase() || ''
+      let userMessage: string
+      if (errorMsg.includes('fetch') || errorMsg.includes('network') || errorMsg.includes('failed to fetch')) {
+        userMessage = 'Network error. Please check your internet connection and try again.'
+      } else if (errorMsg.includes('timeout')) {
+        userMessage = 'Request timed out. Please try again.'
+      } else {
+        userMessage = updateError.message || 'Failed to update client'
+      }
+      setError(userMessage)
       setLoading(false)
     } else {
       setSuccess(true)

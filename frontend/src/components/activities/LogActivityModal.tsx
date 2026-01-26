@@ -114,7 +114,17 @@ export function LogActivityModal({ isOpen, onClose, clientId, onActivityLogged, 
       })
 
     if (insertError) {
-      setError(insertError.message || 'Failed to log activity')
+      // Detect network/connection errors
+      const errorMsg = insertError.message?.toLowerCase() || ''
+      let userMessage: string
+      if (errorMsg.includes('fetch') || errorMsg.includes('network') || errorMsg.includes('failed to fetch')) {
+        userMessage = 'Network error. Please check your internet connection and try again.'
+      } else if (errorMsg.includes('timeout')) {
+        userMessage = 'Request timed out. Please try again.'
+      } else {
+        userMessage = insertError.message || 'Failed to log activity'
+      }
+      setError(userMessage)
       setLoading(false)
     } else {
       setSuccess(true)

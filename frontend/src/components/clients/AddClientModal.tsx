@@ -236,8 +236,18 @@ export function AddClientModal({ isOpen, onClose, onClientAdded }: AddClientModa
       })
 
     if (insertError) {
-      setError(insertError.message || 'Failed to create client')
-      showError('Failed to create client: ' + (insertError.message || 'Unknown error'))
+      // Detect network/connection errors
+      const errorMsg = insertError.message?.toLowerCase() || ''
+      let userMessage: string
+      if (errorMsg.includes('fetch') || errorMsg.includes('network') || errorMsg.includes('failed to fetch')) {
+        userMessage = 'Network error. Please check your internet connection and try again.'
+      } else if (errorMsg.includes('timeout')) {
+        userMessage = 'Request timed out. Please try again.'
+      } else {
+        userMessage = insertError.message || 'Failed to create client'
+      }
+      setError(userMessage)
+      showError(userMessage)
       setLoading(false)
     } else {
       setSuccess(true)
