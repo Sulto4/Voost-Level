@@ -25,6 +25,12 @@ export function DashboardPage() {
     pipelineValue: 0,
     winRate: 0,
   })
+  const [prevStats, setPrevStats] = useState({
+    totalClients: 0,
+    activeProjects: 0,
+    pipelineValue: 0,
+    winRate: 0,
+  })
   const [recentActivities, setRecentActivities] = useState<ActivityWithDetails[]>([])
 
   const dateRangeOptions: { value: DateRange; label: string }[] = [
@@ -54,6 +60,53 @@ export function DashboardPage() {
     }
   }
 
+  // Get previous period date range for comparison
+  function getPreviousPeriodDates(): { start: Date | null; end: Date } | null {
+    const now = new Date()
+    switch (dateRange) {
+      case '7d': {
+        const end = new Date(now)
+        end.setDate(end.getDate() - 7)
+        const start = new Date(end)
+        start.setDate(start.getDate() - 7)
+        return { start, end }
+      }
+      case '30d': {
+        const end = new Date(now)
+        end.setDate(end.getDate() - 30)
+        const start = new Date(end)
+        start.setDate(start.getDate() - 30)
+        return { start, end }
+      }
+      case '90d': {
+        const end = new Date(now)
+        end.setDate(end.getDate() - 90)
+        const start = new Date(end)
+        start.setDate(start.getDate() - 90)
+        return { start, end }
+      }
+      case 'year': {
+        // Previous year
+        const end = new Date(now.getFullYear(), 0, 1)
+        const start = new Date(now.getFullYear() - 1, 0, 1)
+        return { start, end }
+      }
+      case 'all':
+        return null // No comparison for all time
+    }
+  }
+
+  // Calculate percentage change between two values
+  function calculateChange(current: number, previous: number): string {
+    if (previous === 0) {
+      if (current === 0) return '0%'
+      return '+100%' // New from zero
+    }
+    const change = ((current - previous) / previous) * 100
+    const sign = change >= 0 ? '+' : ''
+    return `${sign}${change.toFixed(0)}%`
+  }
+
   useEffect(() => {
     if (currentWorkspace) {
       fetchDashboardStats()
@@ -65,6 +118,7 @@ export function DashboardPage() {
 
     setLoading(true)
     const dateFilter = getDateFilter()
+    const prevPeriod = getPreviousPeriodDates()
 
     // Fetch all clients for this workspace (optionally filtered by creation date)
     let clientsQuery = supabase
@@ -120,6 +174,61 @@ export function DashboardPage() {
       winRate,
     })
 
+    // Fetch previous period data for comparison
+    if (prevPeriod) {
+      // Previous period clients
+      let prevClientsQuery = supabase
+        .from('clients')
+        .select('id, status, value, created_at')
+        .eq('workspace_id', currentWorkspace.id)
+        .lt('created_at', prevPeriod.end.toISOString())
+
+      if (prevPeriod.start) {
+        prevClientsQuery = prevClientsQuery.gte('created_at', prevPeriod.start.toISOString())
+      }
+
+      const { data: prevClientsData } = await prevClientsQuery
+      const prevClients = prevClientsData || []
+      const prevTotalClients = prevClients.length
+      const prevActiveClients = prevClients.filter(c => c.status === 'active').length
+      const prevPipelineValue = prevClients.reduce((sum, c) => sum + (c.value || 0), 0)
+      const prevWinRate = prevTotalClients > 0
+        ? Math.round((prevActiveClients / prevTotalClients) * 100)
+        : 0
+
+      // Previous period projects
+      let prevProjectsQuery = supabase
+        .from('projects')
+        .select('id, status, created_at, clients!inner(workspace_id)')
+        .eq('clients.workspace_id', currentWorkspace.id)
+        .lt('created_at', prevPeriod.end.toISOString())
+
+      if (prevPeriod.start) {
+        prevProjectsQuery = prevProjectsQuery.gte('created_at', prevPeriod.start.toISOString())
+      }
+
+      const { data: prevProjectsData } = await prevProjectsQuery
+      const prevProjects = prevProjectsData || []
+      const prevActiveProjects = prevProjects.filter(p =>
+        p.status === 'in_progress' || p.status === 'planning' || p.status === 'review'
+      ).length
+
+      setPrevStats({
+        totalClients: prevTotalClients,
+        activeProjects: prevActiveProjects,
+        pipelineValue: prevPipelineValue,
+        winRate: prevWinRate,
+      })
+    } else {
+      // No comparison available (all time)
+      setPrevStats({
+        totalClients: 0,
+        activeProjects: 0,
+        pipelineValue: 0,
+        winRate: 0,
+      })
+    }
+
     // Fetch all clients (for activity fetching - need all client IDs)
     const { data: allClientsData } = await supabase
       .from('clients')
@@ -169,11 +278,24 @@ export function DashboardPage() {
     setLoading(false)
   }
 
+  // Calculate changes vs previous period
+  const hasPreviousPeriod = dateRange !== 'all'
+  const clientsChange = hasPreviousPeriod ? calculateChange(stats.totalClients, prevStats.totalClients) : null
+  const projectsChange = hasPreviousPeriod ? calculateChange(stats.activeProjects, prevStats.activeProjects) : null
+  const pipelineChange = hasPreviousPeriod ? calculateChange(stats.pipelineValue, prevStats.pipelineValue) : null
+  const winRateChange = hasPreviousPeriod ? calculateChange(stats.winRate, prevStats.winRate) : null
+
+  // Helper to determine if change is positive
+  function isPositiveChange(change: string | null): boolean {
+    if (!change) return true
+    return change.startsWith('+') || change === '0%'
+  }
+
   const statsDisplay = [
-    { name: 'Total Clients', value: stats.totalClients.toString(), icon: Users, change: '+0%' },
-    { name: 'Active Projects', value: stats.activeProjects.toString(), icon: FolderKanban, change: '+0%' },
-    { name: 'Pipeline Value', value: `$${stats.pipelineValue.toLocaleString()}`, icon: DollarSign, change: '+0%' },
-    { name: 'Win Rate', value: `${stats.winRate}%`, icon: TrendingUp, change: '+0%' },
+    { name: 'Total Clients', value: stats.totalClients.toString(), icon: Users, change: clientsChange, isPositive: isPositiveChange(clientsChange) },
+    { name: 'Active Projects', value: stats.activeProjects.toString(), icon: FolderKanban, change: projectsChange, isPositive: isPositiveChange(projectsChange) },
+    { name: 'Pipeline Value', value: `$${stats.pipelineValue.toLocaleString()}`, icon: DollarSign, change: pipelineChange, isPositive: isPositiveChange(pipelineChange) },
+    { name: 'Win Rate', value: `${stats.winRate}%`, icon: TrendingUp, change: winRateChange, isPositive: isPositiveChange(winRateChange) },
   ]
 
   function getActivityIcon(type: Activity['type']) {
@@ -339,9 +461,16 @@ export function DashboardPage() {
               <div className="p-2 bg-primary-50 dark:bg-primary-900/20 rounded-lg">
                 <stat.icon className="h-5 w-5 text-primary-600 dark:text-primary-400" />
               </div>
-              <span className="text-sm text-green-600 dark:text-green-400 font-medium">
-                {stat.change}
-              </span>
+              {stat.change && (
+                <span className={clsx(
+                  'text-sm font-medium',
+                  stat.isPositive
+                    ? 'text-green-600 dark:text-green-400'
+                    : 'text-red-600 dark:text-red-400'
+                )}>
+                  {stat.change}
+                </span>
+              )}
             </div>
             <div className="mt-4">
               <p className="text-2xl font-bold text-slate-900 dark:text-white">
