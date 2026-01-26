@@ -178,6 +178,9 @@ export function SettingsPage() {
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState('')
   const [showTransferModal, setShowTransferModal] = useState(false)
+  const [showLeaveModal, setShowLeaveModal] = useState(false)
+  const [leaving, setLeaving] = useState(false)
+  const [leaveError, setLeaveError] = useState('')
   const [workspaceMembers, setWorkspaceMembers] = useState<(WorkspaceMember & { email?: string; full_name?: string })[]>([])
   const [selectedNewOwner, setSelectedNewOwner] = useState('')
   const [transferring, setTransferring] = useState(false)
@@ -394,6 +397,34 @@ export function SettingsPage() {
     setSelectedNewOwner('')
     setTransferring(false)
     await refreshWorkspaces()
+  }
+
+  async function handleLeaveWorkspace() {
+    if (!currentWorkspace || !user) return
+
+    setLeaving(true)
+    setLeaveError('')
+
+    try {
+      // Delete the membership record
+      const { error } = await supabase
+        .from('workspace_members')
+        .delete()
+        .eq('workspace_id', currentWorkspace.id)
+        .eq('user_id', user.id)
+
+      if (error) throw error
+
+      showSuccess('You have left the workspace')
+      setShowLeaveModal(false)
+      await refreshWorkspaces()
+      navigate('/dashboard')
+    } catch (err) {
+      console.error('Error leaving workspace:', err)
+      setLeaveError('Failed to leave workspace. Please try again.')
+    } finally {
+      setLeaving(false)
+    }
   }
 
   async function handleAvatarClick() {
@@ -836,6 +867,27 @@ export function SettingsPage() {
                 </div>
               )}
 
+              {/* Leave Workspace - Non-owners only */}
+              {currentRole && currentRole !== 'owner' && (
+                <>
+                  <hr className="border-slate-200 dark:border-slate-700 mt-8" />
+                  <div className="mt-6">
+                    <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
+                      Leave Workspace
+                    </h3>
+                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 mb-4">
+                      Remove yourself from this workspace. You will lose access to all workspace data.
+                    </p>
+                    <button
+                      onClick={() => setShowLeaveModal(true)}
+                      className="btn-outline text-red-600 border-red-300 hover:bg-red-50 dark:hover:bg-red-900/20"
+                    >
+                      Leave Workspace
+                    </button>
+                  </div>
+                </>
+              )}
+
               {/* Danger Zone - Owner Only */}
               {currentRole === 'owner' && (
                 <>
@@ -999,6 +1051,49 @@ export function SettingsPage() {
                         className="btn-primary bg-amber-600 hover:bg-amber-700 disabled:bg-amber-300"
                       >
                         {transferring ? 'Transferring...' : 'Transfer Ownership'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Leave Workspace Modal */}
+              {showLeaveModal && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                  <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xl max-w-md w-full p-6">
+                    <div className="flex items-center gap-3 text-amber-600 mb-4">
+                      <AlertTriangle className="h-6 w-6" />
+                      <h3 className="text-lg font-semibold">Leave Workspace</h3>
+                    </div>
+                    <p className="text-slate-600 dark:text-slate-300 mb-4">
+                      Are you sure you want to leave
+                      <strong className="text-slate-900 dark:text-white"> {currentWorkspace?.name}</strong>?
+                    </p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
+                      You will lose access to all workspace data. You can rejoin only if invited again by a workspace admin.
+                    </p>
+                    {leaveError && (
+                      <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-600 dark:text-red-400 text-sm">
+                        {leaveError}
+                      </div>
+                    )}
+                    <div className="flex justify-end gap-3">
+                      <button
+                        onClick={() => {
+                          setShowLeaveModal(false)
+                          setLeaveError('')
+                        }}
+                        disabled={leaving}
+                        className="btn-outline"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleLeaveWorkspace}
+                        disabled={leaving}
+                        className="btn-danger"
+                      >
+                        {leaving ? 'Leaving...' : 'Leave Workspace'}
                       </button>
                     </div>
                   </div>
