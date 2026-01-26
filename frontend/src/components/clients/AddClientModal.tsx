@@ -6,6 +6,74 @@ import { useWorkspace } from '../../context/WorkspaceContext'
 import { useAuth } from '../../context/AuthContext'
 import type { ClientStatus } from '../../types/database'
 
+/**
+ * Validates phone number format
+ * Accepts: digits, spaces, dashes, parentheses, plus sign, and dots
+ * Requires at least 7 digits for a valid phone number
+ */
+function isValidPhone(phone: string): boolean {
+  if (!phone.trim()) return true // Empty is valid (optional field)
+
+  // Remove all valid phone characters and check if only digits remain
+  const digitsOnly = phone.replace(/[\s\-\(\)\+\.]/g, '')
+
+  // Must be only digits after removing formatting characters
+  if (!/^\d+$/.test(digitsOnly)) {
+    return false
+  }
+
+  // Must have at least 7 digits (minimum for a phone number)
+  return digitsOnly.length >= 7
+}
+
+/**
+ * Formats/cleans a phone number
+ * Removes invalid characters but preserves standard formatting
+ */
+function cleanPhoneNumber(phone: string): string {
+  // Keep only valid phone characters
+  return phone.replace(/[^\d\s\-\(\)\+\.]/g, '').trim()
+}
+
+/**
+ * Validates URL format
+ * Accepts URLs with or without protocol
+ * Returns true for valid URLs, false for invalid ones
+ */
+function isValidUrl(url: string): boolean {
+  if (!url.trim()) return true // Empty is valid (optional field)
+
+  // Add protocol if missing for validation
+  let urlToTest = url.trim()
+  if (!urlToTest.match(/^https?:\/\//i)) {
+    urlToTest = 'https://' + urlToTest
+  }
+
+  try {
+    const parsed = new URL(urlToTest)
+    // Must have a valid hostname with at least one dot (e.g., example.com)
+    return parsed.hostname.includes('.') && parsed.hostname.length > 3
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Normalizes a URL by adding https:// if no protocol is present
+ */
+function normalizeUrl(url: string): string {
+  const trimmed = url.trim()
+  if (!trimmed) return ''
+
+  // If already has a protocol, return as-is
+  if (trimmed.match(/^https?:\/\//i)) {
+    return trimmed
+  }
+
+  // Add https:// prefix
+  return 'https://' + trimmed
+}
+
 interface AddClientModalProps {
   isOpen: boolean
   onClose: () => void
@@ -20,6 +88,7 @@ export function AddClientModal({ isOpen, onClose, onClientAdded }: AddClientModa
   const [company, setCompany] = useState('')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
+  const [website, setWebsite] = useState('')
   const [status, setStatus] = useState<ClientStatus>('lead')
   const [value, setValue] = useState('')
   const [source, setSource] = useState('')
@@ -39,6 +108,18 @@ export function AddClientModal({ isOpen, onClose, onClientAdded }: AddClientModa
       return
     }
 
+    // Validate phone number format
+    if (phone.trim() && !isValidPhone(phone)) {
+      setError('Please enter a valid phone number (e.g., +1 555-123-4567)')
+      return
+    }
+
+    // Validate URL format
+    if (website.trim() && !isValidUrl(website)) {
+      setError('Please enter a valid website URL (e.g., example.com or https://example.com)')
+      return
+    }
+
     if (!currentWorkspace || !user) {
       setError('No workspace selected')
       return
@@ -53,7 +134,8 @@ export function AddClientModal({ isOpen, onClose, onClientAdded }: AddClientModa
         name: name.trim(),
         company: company.trim() || null,
         email: email.trim() || null,
-        phone: phone.trim() || null,
+        phone: phone.trim() ? cleanPhoneNumber(phone) : null,
+        website: website.trim() ? normalizeUrl(website) : null,
         status,
         value: value ? parseFloat(value) : null,
         source: source.trim() || null,
@@ -80,6 +162,7 @@ export function AddClientModal({ isOpen, onClose, onClientAdded }: AddClientModa
     setCompany('')
     setEmail('')
     setPhone('')
+    setWebsite('')
     setStatus('lead')
     setValue('')
     setSource('')
@@ -162,6 +245,21 @@ export function AddClientModal({ isOpen, onClose, onClientAdded }: AddClientModa
               onChange={(e) => setPhone(e.target.value)}
               className="input"
               placeholder="+1 (555) 000-0000"
+              disabled={success}
+            />
+          </div>
+
+          <div>
+            <label htmlFor="website" className="label">
+              Website
+            </label>
+            <input
+              id="website"
+              type="text"
+              value={website}
+              onChange={(e) => setWebsite(e.target.value)}
+              className="input"
+              placeholder="example.com"
               disabled={success}
             />
           </div>
