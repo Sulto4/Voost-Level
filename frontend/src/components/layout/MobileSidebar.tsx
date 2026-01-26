@@ -157,9 +157,17 @@ export function MobileSidebar({ isOpen, onClose }: MobileSidebarProps) {
           {/* User Profile */}
           <div className="p-4 border-t border-slate-200 dark:border-slate-700">
             <div className="flex items-center">
-              <div className="h-8 w-8 rounded-full bg-primary-500 flex items-center justify-center text-white font-medium">
-                {profile?.full_name?.[0]?.toUpperCase() || profile?.email?.[0]?.toUpperCase() || 'U'}
-              </div>
+              {profile?.avatar_url ? (
+                <img
+                  src={profile.avatar_url}
+                  alt={profile.full_name || 'User avatar'}
+                  className="h-8 w-8 rounded-full object-cover"
+                />
+              ) : (
+                <div className="h-8 w-8 rounded-full bg-primary-500 flex items-center justify-center text-white font-medium">
+                  {profile?.full_name?.[0]?.toUpperCase() || profile?.email?.[0]?.toUpperCase() || 'U'}
+                </div>
+              )}
               <div className="ml-3 min-w-0 flex-1">
                 <p className="text-sm font-medium text-slate-900 dark:text-white truncate">
                   {profile?.full_name || 'User'}

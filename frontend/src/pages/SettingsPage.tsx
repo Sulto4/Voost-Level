@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { User, Building2, Palette, Bell, Shield, Webhook, Plus, Trash2, Check, X, AlertTriangle, UserCog, ClipboardList, Phone, Mail, Calendar, FileText, RefreshCw } from 'lucide-react'
+import { User, Building2, Palette, Bell, Shield, Webhook, Plus, Trash2, Check, X, AlertTriangle, UserCog, ClipboardList, Phone, Mail, Calendar, FileText, RefreshCw, Upload, Camera } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
@@ -40,6 +40,11 @@ export function SettingsPage() {
 
   const [fullName, setFullName] = useState(profile?.full_name || '')
   const [saving, setSaving] = useState(false)
+
+  // Avatar upload state
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
+  const [avatarUploading, setAvatarUploading] = useState(false)
 
   // Workspace settings state
   const [workspaceName, setWorkspaceName] = useState(currentWorkspace?.name || '')
@@ -273,6 +278,80 @@ export function SettingsPage() {
     await refreshWorkspaces()
   }
 
+  async function handleAvatarClick() {
+    fileInputRef.current?.click()
+  }
+
+  async function handleAvatarChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    if (!file || !user) return
+
+    // Validate file type
+    const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+    if (!validTypes.includes(file.type)) {
+      showError('Please select a valid image file (JPEG, PNG, GIF, or WebP)')
+      return
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      showError('Image must be less than 5MB')
+      return
+    }
+
+    // Show preview immediately
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      setAvatarPreview(e.target?.result as string)
+    }
+    reader.readAsDataURL(file)
+
+    // Upload to Supabase Storage
+    setAvatarUploading(true)
+    try {
+      const fileExt = file.name.split('.').pop()
+      const fileName = `${user.id}/avatar.${fileExt}`
+
+      // Delete old avatar if exists
+      await supabase.storage.from('avatars').remove([`${user.id}/avatar.jpg`, `${user.id}/avatar.png`, `${user.id}/avatar.gif`, `${user.id}/avatar.webp`])
+
+      // Upload new avatar
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(fileName, file, { upsert: true })
+
+      if (uploadError) {
+        throw uploadError
+      }
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(fileName)
+
+      // Add cache-busting timestamp
+      const avatarUrl = `${publicUrl}?t=${Date.now()}`
+
+      // Update profile with new avatar URL
+      const { error: updateError } = await updateProfile({ avatar_url: avatarUrl })
+      if (updateError) {
+        throw updateError
+      }
+
+      showSuccess('Avatar updated successfully')
+    } catch (err) {
+      console.error('Avatar upload error:', err)
+      showError('Failed to upload avatar')
+      setAvatarPreview(null)
+    } finally {
+      setAvatarUploading(false)
+      // Clear the input so the same file can be selected again
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+    }
+  }
+
   async function handleProfileSave() {
     setSaving(true)
     const { error } = await updateProfile({ full_name: fullName })
@@ -349,11 +428,65 @@ export function SettingsPage() {
                 Profile Settings
               </h2>
 
+              {/* Hidden file input */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/gif,image/webp"
+                onChange={handleAvatarChange}
+                className="hidden"
+                aria-label="Upload avatar"
+              />
+
               <div className="flex items-center space-x-4">
-                <div className="h-20 w-20 rounded-full bg-primary-500 flex items-center justify-center text-white text-2xl font-bold">
-                  {profile?.full_name?.[0]?.toUpperCase() || profile?.email?.[0]?.toUpperCase() || 'U'}
+                <div className="relative group">
+                  {(avatarPreview || profile?.avatar_url) ? (
+                    <img
+                      src={avatarPreview || profile?.avatar_url || ''}
+                      alt="Profile avatar"
+                      className="h-20 w-20 rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className="h-20 w-20 rounded-full bg-primary-500 flex items-center justify-center text-white text-2xl font-bold">
+                      {profile?.full_name?.[0]?.toUpperCase() || profile?.email?.[0]?.toUpperCase() || 'U'}
+                    </div>
+                  )}
+                  {/* Overlay with camera icon on hover */}
+                  <button
+                    onClick={handleAvatarClick}
+                    disabled={avatarUploading}
+                    className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                    aria-label="Change avatar"
+                  >
+                    {avatarUploading ? (
+                      <div className="animate-spin rounded-full h-6 w-6 border-2 border-white border-t-transparent" />
+                    ) : (
+                      <Camera className="h-6 w-6 text-white" />
+                    )}
+                  </button>
                 </div>
-                <button className="btn-outline min-h-[44px]">Change Avatar</button>
+                <div className="flex flex-col gap-2">
+                  <button
+                    onClick={handleAvatarClick}
+                    disabled={avatarUploading}
+                    className="btn-outline min-h-[44px]"
+                  >
+                    {avatarUploading ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-2 border-primary-500 border-t-transparent mr-2" />
+                        Uploading...
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="h-4 w-4 mr-2" />
+                        Change Avatar
+                      </>
+                    )}
+                  </button>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    JPEG, PNG, GIF or WebP. Max 5MB.
+                  </p>
+                </div>
               </div>
 
               <div className="max-w-md space-y-4">

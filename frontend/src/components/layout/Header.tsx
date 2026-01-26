@@ -1,9 +1,18 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Search, Bell, Sun, Moon, Menu, LogOut, User, Settings } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { useNavigate, Link } from 'react-router-dom'
+import { Search, Bell, Sun, Moon, Menu, LogOut, User, Settings, Users, FolderKanban, X } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useTheme } from '../../context/ThemeContext'
-import { clsx } from 'clsx'
+import { useWorkspace } from '../../context/WorkspaceContext'
+import { supabase } from '../../lib/supabase'
+import type { Client, Project } from '../../types/database'
+
+interface SearchResult {
+  type: 'client' | 'project'
+  id: string
+  name: string
+  subtitle?: string
+}
 
 interface HeaderProps {
   onMenuClick?: () => void
@@ -12,10 +21,104 @@ interface HeaderProps {
 export function Header({ onMenuClick }: HeaderProps) {
   const { profile, signOut } = useAuth()
   const { theme, toggleTheme } = useTheme()
+  const { currentWorkspace } = useWorkspace()
   const navigate = useNavigate()
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [showNotifications, setShowNotifications] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([])
+  const [showSearchResults, setShowSearchResults] = useState(false)
+  const [isSearching, setIsSearching] = useState(false)
+  const searchRef = useRef<HTMLDivElement>(null)
+
+  // Close search results when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
+        setShowSearchResults(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  // Debounced search
+  useEffect(() => {
+    if (!searchQuery.trim() || !currentWorkspace) {
+      setSearchResults([])
+      setShowSearchResults(false)
+      return
+    }
+
+    const timer = setTimeout(async () => {
+      setIsSearching(true)
+      const results: SearchResult[] = []
+
+      // Search clients
+      const { data: clients } = await supabase
+        .from('clients')
+        .select('id, name, company')
+        .eq('workspace_id', currentWorkspace.id)
+        .ilike('name', `%${searchQuery}%`)
+        .limit(5)
+
+      if (clients) {
+        results.push(...clients.map(client => ({
+          type: 'client' as const,
+          id: client.id,
+          name: client.name,
+          subtitle: client.company || undefined,
+        })))
+      }
+
+      // Search projects - need to join through clients to filter by workspace
+      const { data: clientsForProjects } = await supabase
+        .from('clients')
+        .select('id')
+        .eq('workspace_id', currentWorkspace.id)
+
+      if (clientsForProjects && clientsForProjects.length > 0) {
+        const clientIds = clientsForProjects.map(c => c.id)
+        const { data: projects } = await supabase
+          .from('projects')
+          .select('id, name, clients!inner(name)')
+          .in('client_id', clientIds)
+          .ilike('name', `%${searchQuery}%`)
+          .limit(5)
+
+        if (projects) {
+          results.push(...projects.map(project => ({
+            type: 'project' as const,
+            id: project.id,
+            name: project.name,
+            subtitle: (project.clients as any)?.name || undefined,
+          })))
+        }
+      }
+
+      setSearchResults(results)
+      setShowSearchResults(true)
+      setIsSearching(false)
+    }, 300)
+
+    return () => clearTimeout(timer)
+  }, [searchQuery, currentWorkspace])
+
+  function handleResultClick(result: SearchResult) {
+    if (result.type === 'client') {
+      navigate(`/clients/${result.id}`)
+    } else {
+      navigate(`/projects/${result.id}`)
+    }
+    setSearchQuery('')
+    setShowSearchResults(false)
+  }
+
+  function clearSearch() {
+    setSearchQuery('')
+    setSearchResults([])
+    setShowSearchResults(false)
+  }
 
   async function handleSignOut() {
     await signOut()
@@ -35,7 +138,7 @@ export function Header({ onMenuClick }: HeaderProps) {
         </button>
 
         {/* Search */}
-        <div className="flex-1 max-w-lg mx-4">
+        <div className="flex-1 max-w-lg mx-4" ref={searchRef}>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
             <input
@@ -43,8 +146,66 @@ export function Header({ onMenuClick }: HeaderProps) {
               placeholder="Search clients, projects..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="input pl-10"
+              onFocus={() => searchQuery && setShowSearchResults(true)}
+              className="input pl-10 pr-10"
             />
+            {searchQuery && (
+              <button
+                onClick={clearSearch}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                aria-label="Clear search"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+
+            {/* Search Results Dropdown */}
+            {showSearchResults && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 max-h-96 overflow-y-auto z-50 animate-fade-in">
+                {isSearching ? (
+                  <div className="p-4 text-center text-slate-500 dark:text-slate-400">
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary-600 mx-auto mb-2"></div>
+                    Searching...
+                  </div>
+                ) : searchResults.length === 0 ? (
+                  <div className="p-4 text-center text-slate-500 dark:text-slate-400">
+                    <Search className="h-6 w-6 mx-auto mb-2 opacity-50" />
+                    <p className="text-sm">No results found for "{searchQuery}"</p>
+                  </div>
+                ) : (
+                  <div className="py-2">
+                    {searchResults.map((result) => (
+                      <button
+                        key={`${result.type}-${result.id}`}
+                        onClick={() => handleResultClick(result)}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors text-left"
+                      >
+                        <div className={`p-2 rounded-lg ${
+                          result.type === 'client'
+                            ? 'bg-blue-100 dark:bg-blue-900/30'
+                            : 'bg-purple-100 dark:bg-purple-900/30'
+                        }`}>
+                          {result.type === 'client' ? (
+                            <Users className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                          ) : (
+                            <FolderKanban className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-slate-900 dark:text-white truncate">
+                            {result.name}
+                          </p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                            {result.type === 'client' ? 'Client' : 'Project'}
+                            {result.subtitle && ` • ${result.subtitle}`}
+                          </p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -107,9 +268,17 @@ export function Header({ onMenuClick }: HeaderProps) {
               }}
               className="flex items-center space-x-2 min-w-[44px] min-h-[44px] p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
             >
-              <div className="h-9 w-9 rounded-full bg-primary-500 flex items-center justify-center text-white font-medium">
-                {profile?.full_name?.[0]?.toUpperCase() || profile?.email?.[0]?.toUpperCase() || 'U'}
-              </div>
+              {profile?.avatar_url ? (
+                <img
+                  src={profile.avatar_url}
+                  alt={profile.full_name || 'User avatar'}
+                  className="h-9 w-9 rounded-full object-cover"
+                />
+              ) : (
+                <div className="h-9 w-9 rounded-full bg-primary-500 flex items-center justify-center text-white font-medium">
+                  {profile?.full_name?.[0]?.toUpperCase() || profile?.email?.[0]?.toUpperCase() || 'U'}
+                </div>
+              )}
             </button>
 
             {showUserMenu && (
