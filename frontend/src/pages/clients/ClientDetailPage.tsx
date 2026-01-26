@@ -1,16 +1,56 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, Edit, Trash2, Mail, Phone, Globe, Building } from 'lucide-react'
+import { ArrowLeft, Edit, Trash2, Mail, Phone, Globe, Building2 } from 'lucide-react'
 import { clsx } from 'clsx'
+import { supabase } from '../../lib/supabase'
+import type { Client } from '../../types/database'
 
 const tabs = ['Overview', 'Projects', 'Activity', 'Files']
 
 export function ClientDetailPage() {
   const { id } = useParams()
   const [activeTab, setActiveTab] = useState('Overview')
+  const [client, setClient] = useState<Client | null>(null)
+  const [loading, setLoading] = useState(true)
 
-  // This would come from API
-  const client = null
+  useEffect(() => {
+    if (id) {
+      fetchClient()
+    }
+  }, [id])
+
+  async function fetchClient() {
+    setLoading(true)
+    const { data, error } = await supabase
+      .from('clients')
+      .select('*')
+      .eq('id', id)
+      .single()
+
+    if (error) {
+      console.error('Error fetching client:', error)
+      setClient(null)
+    } else {
+      setClient(data)
+    }
+    setLoading(false)
+  }
+
+  const statusColors: Record<string, string> = {
+    lead: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
+    active: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
+    inactive: 'bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-300',
+    churned: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
+  }
+
+  if (loading) {
+    return (
+      <div className="text-center py-12">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+        <p className="mt-4 text-slate-500 dark:text-slate-400">Loading client...</p>
+      </div>
+    )
+  }
 
   if (!client) {
     return (
@@ -40,11 +80,18 @@ export function ClientDetailPage() {
           >
             <ArrowLeft className="h-5 w-5 text-slate-500" />
           </Link>
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-              Client Name
-            </h1>
-            <p className="text-slate-500 dark:text-slate-400">Company Name</p>
+          <div className="flex items-center space-x-4">
+            <div className="h-12 w-12 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center text-primary-600 dark:text-primary-400 font-bold text-xl">
+              {client.name[0].toUpperCase()}
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
+                {client.name}
+              </h1>
+              {client.company && (
+                <p className="text-slate-500 dark:text-slate-400">{client.company}</p>
+              )}
+            </div>
           </div>
         </div>
         <div className="flex items-center space-x-2">
@@ -89,22 +136,46 @@ export function ClientDetailPage() {
                   Contact Information
                 </h3>
                 <div className="space-y-3">
-                  <div className="flex items-center text-slate-600 dark:text-slate-300">
-                    <Mail className="h-5 w-5 mr-3 text-slate-400" />
-                    <span>email@example.com</span>
-                  </div>
-                  <div className="flex items-center text-slate-600 dark:text-slate-300">
-                    <Phone className="h-5 w-5 mr-3 text-slate-400" />
-                    <span>+1 234 567 8900</span>
-                  </div>
-                  <div className="flex items-center text-slate-600 dark:text-slate-300">
-                    <Globe className="h-5 w-5 mr-3 text-slate-400" />
-                    <span>www.example.com</span>
-                  </div>
-                  <div className="flex items-center text-slate-600 dark:text-slate-300">
-                    <Building className="h-5 w-5 mr-3 text-slate-400" />
-                    <span>Company Name</span>
-                  </div>
+                  {client.email && (
+                    <div className="flex items-center text-slate-600 dark:text-slate-300">
+                      <Mail className="h-5 w-5 mr-3 text-slate-400" />
+                      <a href={`mailto:${client.email}`} className="hover:text-primary-600">
+                        {client.email}
+                      </a>
+                    </div>
+                  )}
+                  {client.phone && (
+                    <div className="flex items-center text-slate-600 dark:text-slate-300">
+                      <Phone className="h-5 w-5 mr-3 text-slate-400" />
+                      <a href={`tel:${client.phone}`} className="hover:text-primary-600">
+                        {client.phone}
+                      </a>
+                    </div>
+                  )}
+                  {client.website && (
+                    <div className="flex items-center text-slate-600 dark:text-slate-300">
+                      <Globe className="h-5 w-5 mr-3 text-slate-400" />
+                      <a
+                        href={client.website}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="hover:text-primary-600"
+                      >
+                        {client.website}
+                      </a>
+                    </div>
+                  )}
+                  {client.company && (
+                    <div className="flex items-center text-slate-600 dark:text-slate-300">
+                      <Building2 className="h-5 w-5 mr-3 text-slate-400" />
+                      <span>{client.company}</span>
+                    </div>
+                  )}
+                  {!client.email && !client.phone && !client.website && !client.company && (
+                    <p className="text-slate-400 dark:text-slate-500 italic">
+                      No contact information provided
+                    </p>
+                  )}
                 </div>
               </div>
               <div>
@@ -115,20 +186,50 @@ export function ClientDetailPage() {
                   <div>
                     <dt className="text-sm text-slate-500 dark:text-slate-400">Status</dt>
                     <dd className="mt-1">
-                      <span className="badge-primary">Lead</span>
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${statusColors[client.status]}`}>
+                        {client.status}
+                      </span>
                     </dd>
                   </div>
                   <div>
                     <dt className="text-sm text-slate-500 dark:text-slate-400">Source</dt>
-                    <dd className="text-slate-900 dark:text-white">Referral</dd>
+                    <dd className="text-slate-900 dark:text-white">
+                      {client.source || <span className="text-slate-400 italic">Not specified</span>}
+                    </dd>
                   </div>
                   <div>
                     <dt className="text-sm text-slate-500 dark:text-slate-400">Deal Value</dt>
-                    <dd className="text-slate-900 dark:text-white">$10,000</dd>
+                    <dd className="text-slate-900 dark:text-white">
+                      {client.value ? `$${client.value.toLocaleString()}` : <span className="text-slate-400 italic">Not specified</span>}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-sm text-slate-500 dark:text-slate-400">Created</dt>
+                    <dd className="text-slate-900 dark:text-white">
+                      {new Date(client.created_at).toLocaleDateString('en-US', {
+                        month: 'long',
+                        day: 'numeric',
+                        year: 'numeric',
+                      })}
+                    </dd>
                   </div>
                 </dl>
               </div>
             </div>
+
+            {/* Notes Section */}
+            {client.notes && (
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">
+                  Notes
+                </h3>
+                <div className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-4">
+                  <p className="text-slate-600 dark:text-slate-300 whitespace-pre-wrap">
+                    {client.notes}
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         )}
         {activeTab === 'Projects' && (

@@ -7,11 +7,19 @@ interface WorkspaceWithRole extends Workspace {
   role: WorkspaceRole
 }
 
+export interface PendingInvitation {
+  id: string
+  email: string
+  role: WorkspaceRole
+  invitedAt: string
+}
+
 interface WorkspaceContextType {
   workspaces: WorkspaceWithRole[]
   currentWorkspace: WorkspaceWithRole | null
   currentRole: WorkspaceRole | null
   loading: boolean
+  pendingInvitations: PendingInvitation[]
   selectWorkspace: (workspaceId: string) => void
   createWorkspace: (name: string, slug: string) => Promise<{ data: Workspace | null; error: Error | null }>
   updateWorkspace: (id: string, updates: Partial<Workspace>) => Promise<{ error: Error | null }>
@@ -19,6 +27,7 @@ interface WorkspaceContextType {
   inviteMember: (email: string, role: WorkspaceRole) => Promise<{ error: Error | null }>
   removeMember: (memberId: string) => Promise<{ error: Error | null }>
   updateMemberRole: (memberId: string, role: WorkspaceRole) => Promise<{ error: Error | null }>
+  cancelInvitation: (invitationId: string) => void
   refreshWorkspaces: () => Promise<void>
 }
 
@@ -29,6 +38,11 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [workspaces, setWorkspaces] = useState<WorkspaceWithRole[]>([])
   const [currentWorkspace, setCurrentWorkspace] = useState<WorkspaceWithRole | null>(null)
   const [loading, setLoading] = useState(true)
+  const [pendingInvitations, setPendingInvitations] = useState<PendingInvitation[]>(() => {
+    // Load from localStorage
+    const stored = localStorage.getItem('pendingInvitations')
+    return stored ? JSON.parse(stored) : []
+  })
 
   useEffect(() => {
     if (user) {
@@ -153,18 +167,36 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       return { error: new Error('No workspace selected') }
     }
 
-    // For now, just create a pending membership
-    // In production, this would send an email invitation
-    const { error } = await supabase
-      .from('workspace_members')
-      .insert({
-        workspace_id: currentWorkspace.id,
-        user_id: user.id, // This would be resolved from email
-        role,
-        invited_at: new Date().toISOString(),
-      })
+    // Check if already invited
+    const existingInvitation = pendingInvitations.find(
+      (inv) => inv.email.toLowerCase() === email.toLowerCase()
+    )
+    if (existingInvitation) {
+      return { error: new Error('This email has already been invited') }
+    }
 
-    return { error: error as Error | null }
+    // Create a pending invitation (stored in localStorage for demo)
+    const newInvitation: PendingInvitation = {
+      id: crypto.randomUUID(),
+      email: email.toLowerCase(),
+      role,
+      invitedAt: new Date().toISOString(),
+    }
+
+    const updatedInvitations = [...pendingInvitations, newInvitation]
+    setPendingInvitations(updatedInvitations)
+    localStorage.setItem('pendingInvitations', JSON.stringify(updatedInvitations))
+
+    // In production, this would send an email invitation via Supabase Edge Function
+    console.log(`[Demo] Invitation email would be sent to: ${email}`)
+
+    return { error: null }
+  }
+
+  function cancelInvitation(invitationId: string) {
+    const updatedInvitations = pendingInvitations.filter((inv) => inv.id !== invitationId)
+    setPendingInvitations(updatedInvitations)
+    localStorage.setItem('pendingInvitations', JSON.stringify(updatedInvitations))
   }
 
   async function removeMember(memberId: string) {
@@ -194,6 +226,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     currentWorkspace,
     currentRole: currentWorkspace?.role ?? null,
     loading,
+    pendingInvitations,
     selectWorkspace,
     createWorkspace,
     updateWorkspace,
@@ -201,6 +234,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     inviteMember,
     removeMember,
     updateMemberRole,
+    cancelInvitation,
     refreshWorkspaces,
   }
 

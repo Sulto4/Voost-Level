@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { User, Building2, Palette, Bell, Shield } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useAuth } from '../context/AuthContext'
@@ -17,15 +17,52 @@ export function SettingsPage() {
   const [activeTab, setActiveTab] = useState('Profile')
   const { profile, updateProfile } = useAuth()
   const { theme, setTheme } = useTheme()
-  const { currentWorkspace, currentRole } = useWorkspace()
+  const { currentWorkspace, currentRole, updateWorkspace } = useWorkspace()
 
   const [fullName, setFullName] = useState(profile?.full_name || '')
   const [saving, setSaving] = useState(false)
+
+  // Workspace settings state
+  const [workspaceName, setWorkspaceName] = useState(currentWorkspace?.name || '')
+  const [workspaceSlug, setWorkspaceSlug] = useState(currentWorkspace?.slug || '')
+  const [workspaceSaving, setWorkspaceSaving] = useState(false)
+  const [workspaceSuccess, setWorkspaceSuccess] = useState(false)
+  const [workspaceError, setWorkspaceError] = useState('')
+
+  // Update workspace form when currentWorkspace changes
+  useEffect(() => {
+    if (currentWorkspace) {
+      setWorkspaceName(currentWorkspace.name)
+      setWorkspaceSlug(currentWorkspace.slug)
+    }
+  }, [currentWorkspace])
 
   async function handleProfileSave() {
     setSaving(true)
     await updateProfile({ full_name: fullName })
     setSaving(false)
+  }
+
+  async function handleWorkspaceSave() {
+    if (!currentWorkspace) return
+
+    setWorkspaceSaving(true)
+    setWorkspaceError('')
+    setWorkspaceSuccess(false)
+
+    const { error } = await updateWorkspace(currentWorkspace.id, {
+      name: workspaceName.trim(),
+      slug: workspaceSlug.trim(),
+    })
+
+    if (error) {
+      setWorkspaceError(error.message || 'Failed to update workspace')
+    } else {
+      setWorkspaceSuccess(true)
+      setTimeout(() => setWorkspaceSuccess(false), 3000)
+    }
+
+    setWorkspaceSaving(false)
   }
 
   return (
@@ -121,12 +158,23 @@ export function SettingsPage() {
                 </p>
               ) : (
                 <div className="max-w-md space-y-4">
+                  {workspaceError && (
+                    <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-600 dark:text-red-400 text-sm">
+                      {workspaceError}
+                    </div>
+                  )}
+                  {workspaceSuccess && (
+                    <div className="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg text-green-600 dark:text-green-400 text-sm">
+                      Workspace settings saved successfully!
+                    </div>
+                  )}
                   <div>
                     <label htmlFor="workspaceName" className="label">Workspace Name</label>
                     <input
                       id="workspaceName"
                       type="text"
-                      defaultValue={currentWorkspace?.name || ''}
+                      value={workspaceName}
+                      onChange={(e) => setWorkspaceName(e.target.value)}
                       className="input"
                     />
                   </div>
@@ -135,11 +183,18 @@ export function SettingsPage() {
                     <input
                       id="workspaceSlug"
                       type="text"
-                      defaultValue={currentWorkspace?.slug || ''}
+                      value={workspaceSlug}
+                      onChange={(e) => setWorkspaceSlug(e.target.value)}
                       className="input"
                     />
                   </div>
-                  <button className="btn-primary">Save Changes</button>
+                  <button
+                    onClick={handleWorkspaceSave}
+                    disabled={workspaceSaving}
+                    className="btn-primary"
+                  >
+                    {workspaceSaving ? 'Saving...' : 'Save Changes'}
+                  </button>
                 </div>
               )}
             </div>
