@@ -70,11 +70,22 @@ export function MobileSidebar({ isOpen, onClose }: MobileSidebarProps) {
                 onClick={() => setIsDropdownOpen(!isDropdownOpen)}
                 className="w-full flex items-center justify-between px-3 py-2.5 min-h-[44px] text-left text-sm font-medium text-slate-900 dark:text-white bg-slate-100 dark:bg-slate-700 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
               >
-                <span className="truncate">
-                  {currentWorkspace?.name || 'Select Workspace'}
-                </span>
+                <div className="flex items-center min-w-0 flex-1">
+                  {currentWorkspace?.logo_url ? (
+                    <img
+                      src={currentWorkspace.logo_url}
+                      alt={currentWorkspace.name}
+                      className="h-6 w-6 rounded object-cover mr-2 flex-shrink-0"
+                    />
+                  ) : (
+                    <Building2 className="h-5 w-5 mr-2 flex-shrink-0 text-slate-500" />
+                  )}
+                  <span className="truncate">
+                    {currentWorkspace?.name || 'Select Workspace'}
+                  </span>
+                </div>
                 <ChevronDown className={clsx(
-                  'h-4 w-4 text-slate-500 transition-transform',
+                  'h-4 w-4 text-slate-500 transition-transform flex-shrink-0',
                   isDropdownOpen && 'rotate-180'
                 )} />
               </button>
@@ -99,7 +110,15 @@ export function MobileSidebar({ isOpen, onClose }: MobileSidebarProps) {
                               : 'text-slate-700 dark:text-slate-300'
                           )}
                         >
-                          <Building2 className="h-4 w-4 mr-2 flex-shrink-0" />
+                          {workspace.logo_url ? (
+                            <img
+                              src={workspace.logo_url}
+                              alt={workspace.name}
+                              className="h-5 w-5 rounded object-cover mr-2 flex-shrink-0"
+                            />
+                          ) : (
+                            <Building2 className="h-4 w-4 mr-2 flex-shrink-0" />
+                          )}
                           <span className="truncate flex-1">{workspace.name}</span>
                           {workspace.id === currentWorkspace?.id && (
                             <Check className="h-4 w-4 flex-shrink-0 ml-2" />

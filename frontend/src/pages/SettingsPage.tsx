@@ -46,6 +46,11 @@ export function SettingsPage() {
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
   const [avatarUploading, setAvatarUploading] = useState(false)
 
+  // Workspace logo upload state
+  const logoInputRef = useRef<HTMLInputElement>(null)
+  const [logoPreview, setLogoPreview] = useState<string | null>(null)
+  const [logoUploading, setLogoUploading] = useState(false)
+
   // Workspace settings state
   const [workspaceName, setWorkspaceName] = useState(currentWorkspace?.name || '')
   const [workspaceSlug, setWorkspaceSlug] = useState(currentWorkspace?.slug || '')
@@ -363,6 +368,86 @@ export function SettingsPage() {
     setSaving(false)
   }
 
+  async function handleLogoClick() {
+    logoInputRef.current?.click()
+  }
+
+  async function handleLogoChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    if (!file || !currentWorkspace) return
+
+    // Validate file type
+    const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml']
+    if (!validTypes.includes(file.type)) {
+      showError('Please select a valid image file (JPEG, PNG, GIF, WebP, or SVG)')
+      return
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      showError('Image must be less than 5MB')
+      return
+    }
+
+    // Show preview immediately
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      setLogoPreview(e.target?.result as string)
+    }
+    reader.readAsDataURL(file)
+
+    // Upload to Supabase Storage
+    setLogoUploading(true)
+    try {
+      const fileExt = file.name.split('.').pop()
+      const fileName = `${currentWorkspace.id}/logo.${fileExt}`
+
+      // Delete old logos if exist
+      await supabase.storage.from('workspace-logos').remove([
+        `${currentWorkspace.id}/logo.jpg`,
+        `${currentWorkspace.id}/logo.png`,
+        `${currentWorkspace.id}/logo.gif`,
+        `${currentWorkspace.id}/logo.webp`,
+        `${currentWorkspace.id}/logo.svg`
+      ])
+
+      // Upload new logo
+      const { error: uploadError } = await supabase.storage
+        .from('workspace-logos')
+        .upload(fileName, file, { upsert: true })
+
+      if (uploadError) {
+        throw uploadError
+      }
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('workspace-logos')
+        .getPublicUrl(fileName)
+
+      // Add cache-busting timestamp
+      const logoUrl = `${publicUrl}?t=${Date.now()}`
+
+      // Update workspace with new logo URL
+      const { error: updateError } = await updateWorkspace(currentWorkspace.id, { logo_url: logoUrl })
+      if (updateError) {
+        throw updateError
+      }
+
+      showSuccess('Workspace logo updated successfully')
+    } catch (err) {
+      console.error('Logo upload error:', err)
+      showError('Failed to upload logo')
+      setLogoPreview(null)
+    } finally {
+      setLogoUploading(false)
+      // Clear the input so the same file can be selected again
+      if (logoInputRef.current) {
+        logoInputRef.current.value = ''
+      }
+    }
+  }
+
   async function handleWorkspaceSave() {
     if (!currentWorkspace) return
 
@@ -533,7 +618,7 @@ export function SettingsPage() {
                   You don't have permission to edit workspace settings.
                 </p>
               ) : (
-                <div className="max-w-md space-y-4">
+                <div className="max-w-md space-y-6">
                   {workspaceError && (
                     <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-500 dark:text-red-400 text-sm">
                       {workspaceError}
@@ -544,6 +629,70 @@ export function SettingsPage() {
                       Workspace settings saved successfully!
                     </div>
                   )}
+
+                  {/* Workspace Logo Upload */}
+                  <div>
+                    <label className="label">Workspace Logo</label>
+                    <input
+                      ref={logoInputRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/gif,image/webp,image/svg+xml"
+                      onChange={handleLogoChange}
+                      className="hidden"
+                      aria-label="Upload workspace logo"
+                    />
+                    <div className="flex items-center space-x-4 mt-2">
+                      <div className="relative group">
+                        {(logoPreview || currentWorkspace?.logo_url) ? (
+                          <img
+                            src={logoPreview || currentWorkspace?.logo_url || ''}
+                            alt="Workspace logo"
+                            className="h-16 w-16 rounded-lg object-cover border border-slate-200 dark:border-slate-700"
+                          />
+                        ) : (
+                          <div className="h-16 w-16 rounded-lg bg-slate-100 dark:bg-slate-700 flex items-center justify-center border border-slate-200 dark:border-slate-600">
+                            <Building2 className="h-8 w-8 text-slate-400" />
+                          </div>
+                        )}
+                        {/* Overlay with camera icon on hover */}
+                        <button
+                          onClick={handleLogoClick}
+                          disabled={logoUploading}
+                          className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                          aria-label="Change workspace logo"
+                        >
+                          {logoUploading ? (
+                            <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent" />
+                          ) : (
+                            <Camera className="h-5 w-5 text-white" />
+                          )}
+                        </button>
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <button
+                          onClick={handleLogoClick}
+                          disabled={logoUploading}
+                          className="btn-outline min-h-[44px]"
+                        >
+                          {logoUploading ? (
+                            <>
+                              <div className="animate-spin rounded-full h-4 w-4 border-2 border-primary-500 border-t-transparent mr-2" />
+                              Uploading...
+                            </>
+                          ) : (
+                            <>
+                              <Upload className="h-4 w-4 mr-2" />
+                              {currentWorkspace?.logo_url ? 'Change Logo' : 'Upload Logo'}
+                            </>
+                          )}
+                        </button>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          JPEG, PNG, GIF, WebP, or SVG. Max 5MB.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
                   <div>
                     <label htmlFor="workspaceName" className="label">Workspace Name</label>
                     <input
