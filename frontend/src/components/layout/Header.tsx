@@ -296,8 +296,9 @@ export function Header({ onMenuClick }: HeaderProps) {
     const timer = setTimeout(async () => {
       setIsSearching(true)
       const results: SearchResult[] = []
+      const addedClientIds = new Set<string>()
 
-      // Search clients
+      // Search clients by name
       const { data: clients } = await supabase
         .from('clients')
         .select('id, name, company')
@@ -306,12 +307,15 @@ export function Header({ onMenuClick }: HeaderProps) {
         .limit(5)
 
       if (clients) {
-        results.push(...clients.map(client => ({
-          type: 'client' as const,
-          id: client.id,
-          name: client.name,
-          subtitle: client.company || undefined,
-        })))
+        clients.forEach(client => {
+          addedClientIds.add(client.id)
+          results.push({
+            type: 'client' as const,
+            id: client.id,
+            name: client.name,
+            subtitle: client.company || undefined,
+          })
+        })
       }
 
       // Search projects - need to join through clients to filter by workspace
@@ -336,6 +340,30 @@ export function Header({ onMenuClick }: HeaderProps) {
             name: project.name,
             subtitle: (project.clients as any)?.name || undefined,
           })))
+        }
+
+        // Search activities/notes by content - full text search
+        const { data: activities } = await supabase
+          .from('activities')
+          .select('id, content, client_id, type, clients!inner(id, name, company, workspace_id)')
+          .in('client_id', clientIds)
+          .ilike('content', `%${searchQuery}%`)
+          .limit(10)
+
+        if (activities) {
+          // Add clients that have matching notes (if not already added)
+          activities.forEach(activity => {
+            const client = activity.clients as any
+            if (client && client.workspace_id === currentWorkspace.id && !addedClientIds.has(client.id)) {
+              addedClientIds.add(client.id)
+              results.push({
+                type: 'client' as const,
+                id: client.id,
+                name: client.name,
+                subtitle: `Found in ${activity.type || 'note'}: "${activity.content?.substring(0, 50)}${(activity.content?.length || 0) > 50 ? '...' : ''}"`,
+              })
+            }
+          })
         }
       }
 
