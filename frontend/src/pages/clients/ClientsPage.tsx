@@ -13,7 +13,7 @@ import { calculateLeadScore, getScoreColor, getScoreLabel } from '../../lib/lead
 const ITEMS_PER_PAGE = 20
 
 type DateFilter = 'today' | 'this_week' | 'this_month' | null
-type SortField = 'name' | 'created_at' | 'value' | 'status'
+type SortField = 'name' | 'created_at' | 'value' | 'status' | 'score'
 type SortDirection = 'asc' | 'desc'
 
 interface FilterPreset {
@@ -509,9 +509,16 @@ export function ClientsPage() {
       dataQuery = dataQuery.eq('source', sourceFilter)
     }
 
-    const { data, error } = await dataQuery
-      .order(sortField, { ascending: sortDirection === 'asc' })
-      .range(from, to)
+    // For score sorting, we need to sort client-side after fetching
+    // For other fields, use Supabase's built-in sorting
+    if (sortField !== 'score') {
+      dataQuery = dataQuery.order(sortField, { ascending: sortDirection === 'asc' })
+    } else {
+      // Default sort by created_at for score sorting (will re-sort client-side)
+      dataQuery = dataQuery.order('created_at', { ascending: false })
+    }
+
+    const { data, error } = await dataQuery.range(from, to)
 
     if (error) {
       console.error('Error fetching clients:', error)
@@ -521,7 +528,11 @@ export function ClientsPage() {
     setLoading(false)
   }
 
-  const filteredClients = clients.filter((client) => {
+  // Get lead scoring config for client-side score calculations
+  const leadScoringConfig = (currentWorkspace?.settings as { leadScoring?: LeadScoringConfig } | null)?.leadScoring
+
+  // Filter and optionally sort by score
+  const filteredClientsBase = clients.filter((client) => {
     // Apply favorites filter
     if (favoritesFilter && !favoriteClientIds.has(client.id)) {
       return false
@@ -536,6 +547,15 @@ export function ClientsPage() {
       client.source?.toLowerCase().includes(query)
     )
   })
+
+  // Sort by score client-side when sortField is 'score'
+  const filteredClients = sortField === 'score' && leadScoringConfig?.enabled
+    ? [...filteredClientsBase].sort((a, b) => {
+        const scoreA = calculateLeadScore(a, leadScoringConfig).score
+        const scoreB = calculateLeadScore(b, leadScoringConfig).score
+        return sortDirection === 'asc' ? scoreA - scoreB : scoreB - scoreA
+      })
+    : filteredClientsBase
 
   // Pagination calculations
   const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE)
@@ -1405,7 +1425,13 @@ export function ClientsPage() {
                   </button>
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                  Score
+                  <button
+                    onClick={() => handleSort('score')}
+                    className="flex items-center hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+                  >
+                    Score
+                    <SortIcon field="score" />
+                  </button>
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                   Source
