@@ -675,6 +675,90 @@ export function ProjectDetailPage() {
                       )}
                     </dd>
                   </div>
+                  {/* Budget vs Actual Display */}
+                  {project.budget && project.budget > 0 && totalMinutes > 0 && (
+                    <div className="col-span-1 md:col-span-2 mt-2 pt-4 border-t border-slate-200 dark:border-slate-700">
+                      <dt className="text-sm text-slate-500 dark:text-slate-400 mb-2">Budget vs Actual</dt>
+                      <dd>
+                        {(() => {
+                          // Calculate actual spend based on logged time
+                          // Use $100/hour as default hourly rate (can be customized)
+                          const hourlyRate = 100
+                          const hoursWorked = totalMinutes / 60
+                          const actualSpend = hoursWorked * hourlyRate
+                          const budgetRemaining = project.budget - actualSpend
+                          const percentUsed = Math.min((actualSpend / project.budget) * 100, 100)
+                          const isOverBudget = actualSpend > project.budget
+                          const percentOver = isOverBudget ? ((actualSpend - project.budget) / project.budget) * 100 : 0
+
+                          return (
+                            <div className="space-y-3">
+                              {/* Progress Bar */}
+                              <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden">
+                                <div
+                                  className={`h-full transition-all duration-500 ${
+                                    isOverBudget
+                                      ? 'bg-red-500'
+                                      : percentUsed > 80
+                                        ? 'bg-amber-500'
+                                        : 'bg-green-500'
+                                  }`}
+                                  style={{ width: `${Math.min(percentUsed, 100)}%` }}
+                                />
+                              </div>
+
+                              {/* Stats Grid */}
+                              <div className="grid grid-cols-3 gap-4 text-sm">
+                                <div>
+                                  <span className="text-slate-500 dark:text-slate-400 block">Budget</span>
+                                  <span className="font-semibold text-slate-900 dark:text-white">
+                                    ${project.budget.toLocaleString()}
+                                  </span>
+                                </div>
+                                <div>
+                                  <span className="text-slate-500 dark:text-slate-400 block">Spent</span>
+                                  <span className={`font-semibold ${isOverBudget ? 'text-red-600 dark:text-red-400' : 'text-slate-900 dark:text-white'}`}>
+                                    ${actualSpend.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </span>
+                                </div>
+                                <div>
+                                  <span className="text-slate-500 dark:text-slate-400 block">Remaining</span>
+                                  <span className={`font-semibold ${isOverBudget ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
+                                    {isOverBudget ? '-' : ''}${Math.abs(budgetRemaining).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Over Budget Warning */}
+                              {isOverBudget && (
+                                <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                                  <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0" />
+                                  <span className="text-sm text-red-700 dark:text-red-300">
+                                    Project is {percentOver.toFixed(0)}% over budget
+                                  </span>
+                                </div>
+                              )}
+
+                              {/* Budget Health Indicator */}
+                              {!isOverBudget && percentUsed > 80 && (
+                                <div className="flex items-center gap-2 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+                                  <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+                                  <span className="text-sm text-amber-700 dark:text-amber-300">
+                                    Budget is {percentUsed.toFixed(0)}% used - approaching limit
+                                  </span>
+                                </div>
+                              )}
+
+                              {/* Time-based calculation note */}
+                              <p className="text-xs text-slate-400 dark:text-slate-500 italic">
+                                * Based on {formatDuration(totalMinutes)} logged at ${hourlyRate}/hr
+                              </p>
+                            </div>
+                          )
+                        })()}
+                      </dd>
+                    </div>
+                  )}
                   <div>
                     <dt className="text-sm text-slate-500 dark:text-slate-400">Created</dt>
                     <dd className="text-slate-900 dark:text-white">
