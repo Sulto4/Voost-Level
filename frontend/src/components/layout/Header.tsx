@@ -1,11 +1,27 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { Search, Bell, Sun, Moon, Menu, LogOut, User, Settings, Users, FolderKanban, X } from 'lucide-react'
+import { Search, Bell, Sun, Moon, Menu, LogOut, User, Settings, Users, FolderKanban, X, Clock, AlertTriangle, CheckCircle } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useTheme } from '../../context/ThemeContext'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import { supabase } from '../../lib/supabase'
-import type { Client, Project } from '../../types/database'
+import type { Client, Project, Task } from '../../types/database'
+
+interface OverdueTask extends Task {
+  project_name?: string
+  client_name?: string
+  project_id: string
+}
+
+interface Notification {
+  id: string
+  type: 'overdue_task' | 'info'
+  title: string
+  subtitle?: string
+  timestamp: Date
+  read: boolean
+  link?: string
+}
 
 interface SearchResult {
   type: 'client' | 'project'
@@ -30,6 +46,111 @@ export function Header({ onMenuClick }: HeaderProps) {
   const [showSearchResults, setShowSearchResults] = useState(false)
   const [isSearching, setIsSearching] = useState(false)
   const searchRef = useRef<HTMLDivElement>(null)
+  const [notifications, setNotifications] = useState<Notification[]>([])
+  const [notificationsLoading, setNotificationsLoading] = useState(false)
+  const notificationsRef = useRef<HTMLDivElement>(null)
+
+  // Fetch overdue tasks for notifications
+  const fetchOverdueTasks = async () => {
+    if (!currentWorkspace) return
+
+    setNotificationsLoading(true)
+
+    // Get all clients for this workspace
+    const { data: clients } = await supabase
+      .from('clients')
+      .select('id')
+      .eq('workspace_id', currentWorkspace!.id)
+
+    if (!clients || clients.length === 0) {
+      setNotifications([])
+      setNotificationsLoading(false)
+      return
+    }
+
+    const clientIds = clients.map(c => c.id)
+
+    // Get all projects for these clients
+    const { data: projects } = await supabase
+      .from('projects')
+      .select('id, name, client_id, clients!inner(name)')
+      .in('client_id', clientIds)
+
+    if (!projects || projects.length === 0) {
+      setNotifications([])
+      setNotificationsLoading(false)
+      return
+    }
+
+    const projectIds = projects.map(p => p.id)
+    const projectMap = new Map(projects.map(p => [p.id, { name: p.name, client_name: (p.clients as any)?.name }]))
+
+    // Get overdue tasks (due_date is before today and status is not 'done')
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const todayStr = today.toISOString().split('T')[0]
+
+    const { data: overdueTasks } = await supabase
+      .from('tasks')
+      .select('*')
+      .in('project_id', projectIds)
+      .lt('due_date', todayStr)
+      .neq('status', 'done')
+      .order('due_date', { ascending: true })
+      .limit(10)
+
+    if (overdueTasks && overdueTasks.length > 0) {
+      const newNotifications: Notification[] = overdueTasks.map(task => {
+        const projectInfo = projectMap.get(task.project_id)
+        const dueDate = new Date(task.due_date!)
+        const daysOverdue = Math.floor((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24))
+
+        return {
+          id: `task-${task.id}`,
+          type: 'overdue_task' as const,
+          title: `Task "${task.title}" is overdue`,
+          subtitle: `${daysOverdue} day${daysOverdue !== 1 ? 's' : ''} overdue • ${projectInfo?.name || 'Unknown Project'}`,
+          timestamp: dueDate,
+          read: false,
+          link: `/projects/${task.project_id}`,
+        }
+      })
+      setNotifications(newNotifications)
+    } else {
+      setNotifications([])
+    }
+
+    setNotificationsLoading(false)
+  }
+
+  // Initial fetch and periodic refresh
+  useEffect(() => {
+    if (!currentWorkspace) return
+
+    fetchOverdueTasks()
+
+    // Refresh notifications every 5 minutes
+    const interval = setInterval(fetchOverdueTasks, 5 * 60 * 1000)
+    return () => clearInterval(interval)
+  }, [currentWorkspace])
+
+  // Refetch when notifications panel is opened
+  useEffect(() => {
+    if (showNotifications && currentWorkspace) {
+      fetchOverdueTasks()
+    }
+  }, [showNotifications])
+
+  // Close notifications when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (notificationsRef.current && !notificationsRef.current.contains(event.target as Node)) {
+        setShowNotifications(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   // Close search results when clicking outside
   useEffect(() => {
@@ -225,7 +346,7 @@ export function Header({ onMenuClick }: HeaderProps) {
           </button>
 
           {/* Notifications */}
-          <div className="relative">
+          <div className="relative" ref={notificationsRef}>
             <button
               onClick={() => {
                 setShowNotifications(!showNotifications)
@@ -235,26 +356,76 @@ export function Header({ onMenuClick }: HeaderProps) {
               aria-label="Notifications"
             >
               <Bell className="h-5 w-5" />
-              <span className="absolute top-1.5 right-1.5 h-2 w-2 bg-red-500 rounded-full" />
+              {notifications.length > 0 && (
+                <span className="absolute top-1.5 right-1.5 h-2 w-2 bg-red-500 rounded-full" />
+              )}
             </button>
 
             {showNotifications && (
-              <div className="absolute right-0 mt-2 w-80 bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 py-2 animate-fade-in">
-                <div className="px-4 py-2 border-b border-slate-200 dark:border-slate-700">
+              <div className="absolute right-0 mt-2 w-96 bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 py-2 animate-fade-in">
+                <div className="px-4 py-2 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
                   <h3 className="font-semibold text-slate-900 dark:text-white">Notifications</h3>
+                  {notifications.length > 0 && (
+                    <span className="text-xs px-2 py-0.5 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-full">
+                      {notifications.length} overdue
+                    </span>
+                  )}
                 </div>
-                <div className="max-h-80 overflow-y-auto">
-                  <div className="py-8 text-center text-slate-500 dark:text-slate-400">
-                    <Bell className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                    <p className="text-sm">No new notifications</p>
-                    <p className="text-xs mt-1">You're all caught up!</p>
+                <div className="max-h-96 overflow-y-auto">
+                  {notificationsLoading ? (
+                    <div className="py-8 text-center text-slate-500 dark:text-slate-400">
+                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600 mx-auto mb-2"></div>
+                      <p className="text-sm">Loading notifications...</p>
+                    </div>
+                  ) : notifications.length === 0 ? (
+                    <div className="py-8 text-center text-slate-500 dark:text-slate-400">
+                      <CheckCircle className="h-8 w-8 mx-auto mb-2 text-green-500 opacity-70" />
+                      <p className="text-sm">No overdue tasks</p>
+                      <p className="text-xs mt-1">You're all caught up!</p>
+                    </div>
+                  ) : (
+                    <div className="py-1">
+                      {notifications.map((notification) => (
+                        <button
+                          key={notification.id}
+                          onClick={() => {
+                            if (notification.link) {
+                              navigate(notification.link)
+                              setShowNotifications(false)
+                            }
+                          }}
+                          className="w-full flex items-start gap-3 px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors text-left border-b border-slate-100 dark:border-slate-700/50 last:border-0"
+                        >
+                          <div className="p-2 rounded-lg bg-red-100 dark:bg-red-900/30 flex-shrink-0">
+                            <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-slate-900 dark:text-white truncate">
+                              {notification.title}
+                            </p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                              {notification.subtitle}
+                            </p>
+                          </div>
+                          <Clock className="h-4 w-4 text-slate-400 flex-shrink-0 mt-0.5" />
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {notifications.length > 0 && (
+                  <div className="px-4 py-2 border-t border-slate-200 dark:border-slate-700">
+                    <button
+                      onClick={() => {
+                        navigate('/projects')
+                        setShowNotifications(false)
+                      }}
+                      className="text-sm text-primary-600 dark:text-primary-400 hover:underline w-full text-center"
+                    >
+                      View all projects
+                    </button>
                   </div>
-                </div>
-                <div className="px-4 py-2 border-t border-slate-200 dark:border-slate-700">
-                  <button className="text-sm text-primary-600 dark:text-primary-400 hover:underline w-full text-center">
-                    View all notifications
-                  </button>
-                </div>
+                )}
               </div>
             )}
           </div>
