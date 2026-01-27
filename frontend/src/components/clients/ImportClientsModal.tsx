@@ -23,6 +23,7 @@ interface ParsedClient {
   source?: string
   website?: string
   notes?: string
+  custom_fields?: Record<string, string>
 }
 
 interface ImportPreview {
@@ -102,6 +103,27 @@ export function ImportClientsModal({ isOpen, onClose, onImportComplete }: Import
       return { valid: [], duplicates: [], errors: [{ row: 1, error: 'Missing required "Name" column' }] }
     }
 
+    // Identify custom field columns (columns not matching standard fields)
+    const standardFields = new Set([
+      'name', 'client name', 'client',
+      'company', 'company name',
+      'email', 'email address',
+      'phone', 'phone number', 'telephone',
+      'status',
+      'value', 'deal value', 'amount',
+      'source', 'lead source',
+      'website', 'url', 'web',
+      'notes', 'note', 'comments',
+      'tags', 'created' // Also skip these common fields
+    ])
+
+    const customFieldIndices: { index: number; header: string }[] = []
+    headers.forEach((header, index) => {
+      if (header && !standardFields.has(header.toLowerCase())) {
+        customFieldIndices.push({ index, header: csvData[0][index] }) // Use original header casing
+      }
+    })
+
     // Process data rows
     for (let i = 1; i < csvData.length; i++) {
       const row = csvData[i]
@@ -130,6 +152,15 @@ export function ImportClientsModal({ isOpen, onClose, onImportComplete }: Import
 
       const email = emailIndex >= 0 ? row[emailIndex]?.trim() || undefined : undefined
 
+      // Extract custom fields
+      const custom_fields: Record<string, string> = {}
+      for (const { index, header } of customFieldIndices) {
+        const value = row[index]?.trim()
+        if (value) {
+          custom_fields[header] = value
+        }
+      }
+
       const client: ParsedClient = {
         name,
         company: companyIndex >= 0 ? row[companyIndex]?.trim() || undefined : undefined,
@@ -140,6 +171,7 @@ export function ImportClientsModal({ isOpen, onClose, onImportComplete }: Import
         source: sourceIndex >= 0 ? row[sourceIndex]?.trim() || undefined : undefined,
         website: websiteIndex >= 0 ? row[websiteIndex]?.trim() || undefined : undefined,
         notes: notesIndex >= 0 ? row[notesIndex]?.trim() || undefined : undefined,
+        custom_fields: Object.keys(custom_fields).length > 0 ? custom_fields : undefined,
       }
 
       // Check for duplicate emails within the file
@@ -242,6 +274,7 @@ export function ImportClientsModal({ isOpen, onClose, onImportComplete }: Import
       source: client.source || null,
       website: client.website || null,
       notes: client.notes || null,
+      custom_fields: client.custom_fields || null,
     }))
 
     const { data, error: insertError } = await supabase
