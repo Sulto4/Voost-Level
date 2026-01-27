@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Plus, Search, Filter, MoreHorizontal, Building2, Mail, Phone, ChevronLeft, ChevronRight, X, Download, Upload, Trash2, CheckSquare, AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown, Save, FolderOpen, RotateCcw, Archive, Star } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
@@ -6,6 +6,7 @@ import { useWorkspace } from '../../context/WorkspaceContext'
 import { AddClientModal } from '../../components/clients/AddClientModal'
 import { ImportClientsModal } from '../../components/clients/ImportClientsModal'
 import { ClientTableSkeleton } from '../../components/ui/Skeleton'
+import { PullToRefresh } from '../../components/ui/PullToRefresh'
 import type { Client, ClientStatus } from '../../types/database'
 
 const ITEMS_PER_PAGE = 20
@@ -800,6 +801,12 @@ export function ClientsPage() {
     document.body.removeChild(link)
   }
 
+  // Handle pull-to-refresh
+  const handleRefresh = useCallback(async () => {
+    await fetchClients()
+    await fetchAvailableSources()
+  }, [currentWorkspace, currentPage, statusFilter, dateFilter, sourceFilter, sortField, sortDirection, showDeletedClients])
+
   // Export filtered clients to JSON
   async function exportToJSON() {
     const exportData = await fetchExportData()
@@ -838,7 +845,8 @@ export function ClientsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <PullToRefresh onRefresh={handleRefresh} className="min-h-full">
+      <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
@@ -1879,6 +1887,7 @@ export function ClientsPage() {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </PullToRefresh>
   )
 }

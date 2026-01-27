@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { Users, FolderKanban, DollarSign, TrendingUp, MessageSquare, Phone, Mail, Calendar, CheckSquare, ArrowRightLeft, ChevronDown, Settings2, X, GripVertical, Pin, Building2 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { supabase } from '../lib/supabase'
 import { useWorkspace } from '../context/WorkspaceContext'
 import { StatCardSkeleton, CardSkeleton } from '../components/ui/Skeleton'
+import { PullToRefresh } from '../components/ui/PullToRefresh'
 import type { Activity, Client, Profile } from '../types/database'
 
 type DateRange = '7d' | '30d' | '90d' | 'year' | 'all'
@@ -205,6 +206,12 @@ export function DashboardPage() {
     setPinnedClientIds(newIds)
     localStorage.setItem('pinnedClientIds', JSON.stringify(newIds))
   }
+
+  // Handle pull-to-refresh
+  const handleRefresh = useCallback(async () => {
+    await fetchDashboardStats()
+    await fetchPinnedClients()
+  }, [currentWorkspace, dateRange, pinnedClientIds])
 
   // Toggle widget visibility
   function toggleWidget(widgetId: WidgetId) {
@@ -511,18 +518,19 @@ export function DashboardPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-            Dashboard
-          </h1>
-          <p className="text-slate-500 dark:text-slate-400">
-            Welcome to Voost Level. Here's an overview of your workspace.
-          </p>
-        </div>
+    <PullToRefresh onRefresh={handleRefresh} className="min-h-full">
+      <div className="space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
+              Dashboard
+            </h1>
+            <p className="text-slate-500 dark:text-slate-400">
+              Welcome to Voost Level. Here's an overview of your workspace.
+            </p>
+          </div>
 
-        {/* Actions */}
+          {/* Actions */}
         <div className="flex items-center gap-2">
           {/* Customize Button */}
           <button
@@ -815,6 +823,7 @@ export function DashboardPage() {
           </Link>
         </div>
       )}
-    </div>
+      </div>
+    </PullToRefresh>
   )
 }
