@@ -7,7 +7,8 @@ import { AddClientModal } from '../../components/clients/AddClientModal'
 import { ImportClientsModal } from '../../components/clients/ImportClientsModal'
 import { ClientTableSkeleton } from '../../components/ui/Skeleton'
 import { PullToRefresh } from '../../components/ui/PullToRefresh'
-import type { Client, ClientStatus } from '../../types/database'
+import type { Client, ClientStatus, LeadScoringConfig } from '../../types/database'
+import { calculateLeadScore, getScoreColor, getScoreLabel } from '../../lib/leadScoring'
 
 const ITEMS_PER_PAGE = 20
 
@@ -1404,6 +1405,9 @@ export function ClientsPage() {
                   </button>
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                  Score
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                   Source
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
@@ -1489,6 +1493,20 @@ export function ClientsPage() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900 dark:text-white">
                     {client.value ? `$${client.value.toLocaleString()}` : '-'}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm">
+                    {(() => {
+                      const settings = currentWorkspace?.settings as { leadScoring?: LeadScoringConfig } | null
+                      const config = settings?.leadScoring
+                      if (!config?.enabled) return <span className="text-slate-400">-</span>
+                      const score = calculateLeadScore(client, config)
+                      if (score.maxScore === 0) return <span className="text-slate-400">-</span>
+                      return (
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getScoreColor(score.percentage)}`}>
+                          {score.score} · {getScoreLabel(score.percentage)}
+                        </span>
+                      )
+                    })()}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 dark:text-slate-400">
                     {client.source || '-'}
