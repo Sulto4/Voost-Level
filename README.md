@@ -126,7 +126,7 @@ cd frontend && npm run dev
 
    Create or verify `.env` file in the `frontend` directory:
    ```env
-   VITE_SUPABASE_URL=https://dsztivupnrzaxvrijxpu.supabase.co
+   VITE_SUPABASE_URL=https://your-project-id.supabase.co
    VITE_SUPABASE_ANON_KEY=<your-anon-key>
    ```
 

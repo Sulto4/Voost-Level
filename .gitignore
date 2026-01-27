@@ -8,9 +8,12 @@ build/
 .next/
 out/
 
-# Environment files (local overrides)
+# Environment files - NEVER commit these
+.env
 .env.local
 .env.*.local
+frontend/.env
+frontend/.env.local
 
 # IDE
 .idea/
