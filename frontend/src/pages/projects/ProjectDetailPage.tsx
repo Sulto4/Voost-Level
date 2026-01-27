@@ -1,6 +1,6 @@
 import { useState, useEffect, DragEvent } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Edit, Trash2, Plus, CheckSquare, Calendar, DollarSign, Building2, AlertCircle, Flag, CheckCircle, User, GripVertical, ChevronDown, ChevronRight, Filter, X } from 'lucide-react'
+import { ArrowLeft, Edit, Trash2, Plus, CheckSquare, Calendar, DollarSign, Building2, AlertCircle, Flag, CheckCircle, User, GripVertical, ChevronDown, ChevronRight, Filter, X, Clock, Play, Square } from 'lucide-react'
 import { clsx } from 'clsx'
 import { supabase } from '../../lib/supabase'
 import { EditProjectModal } from '../../components/projects/EditProjectModal'
@@ -19,7 +19,15 @@ interface TaskWithAssignee extends Task {
   subtasks?: TaskWithAssignee[]
 }
 
-const tabs = ['Overview', 'Milestones', 'Tasks', 'Files']
+const tabs = ['Overview', 'Milestones', 'Tasks', 'Time', 'Files']
+
+interface TimeEntry {
+  id: string
+  description: string
+  duration: number // in minutes
+  date: string
+  createdAt: string
+}
 
 export function ProjectDetailPage() {
   const { id } = useParams()
@@ -52,6 +60,75 @@ export function ProjectDetailPage() {
   const [taskPriorityFilter, setTaskPriorityFilter] = useState<string | null>(null) // null = all, or 'low' | 'medium' | 'high'
   const [taskStatusFilter, setTaskStatusFilter] = useState<string | null>(null) // null = all, or 'todo' | 'in_progress' | 'done'
   const [isTaskFilterDropdownOpen, setIsTaskFilterDropdownOpen] = useState(false)
+
+  // Time tracking state
+  const [timeEntries, setTimeEntries] = useState<TimeEntry[]>(() => {
+    const saved = localStorage.getItem(`project_time_${id}`)
+    return saved ? JSON.parse(saved) : []
+  })
+  const [showAddTimeModal, setShowAddTimeModal] = useState(false)
+  const [newTimeDescription, setNewTimeDescription] = useState('')
+  const [newTimeHours, setNewTimeHours] = useState('')
+  const [newTimeMinutes, setNewTimeMinutes] = useState('')
+  const [newTimeDate, setNewTimeDate] = useState(new Date().toISOString().split('T')[0])
+  const [addingTime, setAddingTime] = useState(false)
+
+  // Calculate total time
+  const totalMinutes = timeEntries.reduce((sum, entry) => sum + entry.duration, 0)
+  const totalHours = Math.floor(totalMinutes / 60)
+  const remainingMinutes = totalMinutes % 60
+
+  // Save time entries to localStorage when they change
+  useEffect(() => {
+    if (id) {
+      localStorage.setItem(`project_time_${id}`, JSON.stringify(timeEntries))
+    }
+  }, [timeEntries, id])
+
+  // Add time entry
+  const handleAddTimeEntry = () => {
+    const hours = parseInt(newTimeHours) || 0
+    const minutes = parseInt(newTimeMinutes) || 0
+    const duration = hours * 60 + minutes
+
+    if (duration <= 0) {
+      alert('Please enter a valid duration')
+      return
+    }
+
+    setAddingTime(true)
+    const newEntry: TimeEntry = {
+      id: crypto.randomUUID(),
+      description: newTimeDescription || 'Time entry',
+      duration,
+      date: newTimeDate,
+      createdAt: new Date().toISOString()
+    }
+
+    setTimeEntries(prev => [newEntry, ...prev])
+    setNewTimeDescription('')
+    setNewTimeHours('')
+    setNewTimeMinutes('')
+    setNewTimeDate(new Date().toISOString().split('T')[0])
+    setShowAddTimeModal(false)
+    setAddingTime(false)
+  }
+
+  // Delete time entry
+  const handleDeleteTimeEntry = (entryId: string) => {
+    if (confirm('Delete this time entry?')) {
+      setTimeEntries(prev => prev.filter(e => e.id !== entryId))
+    }
+  }
+
+  // Format duration for display
+  const formatDuration = (minutes: number) => {
+    const h = Math.floor(minutes / 60)
+    const m = minutes % 60
+    if (h === 0) return `${m}m`
+    if (m === 0) return `${h}h`
+    return `${h}h ${m}m`
+  }
 
   useEffect(() => {
     if (id) {
@@ -1225,6 +1302,159 @@ export function ProjectDetailPage() {
                     </div>
                   )
                 })}
+              </div>
+            )}
+          </div>
+        )}
+        {activeTab === 'Time' && (
+          <div className="space-y-4">
+            {/* Time Summary Header */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-primary-50 dark:bg-primary-900/20 rounded-lg">
+                  <Clock className="h-6 w-6 text-primary-600 dark:text-primary-400" />
+                </div>
+                <div>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">Total Time Logged</p>
+                  <p className="text-2xl font-bold text-slate-900 dark:text-white">
+                    {totalHours > 0 && `${totalHours}h `}{remainingMinutes}m
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowAddTimeModal(true)}
+                className="btn-primary"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Log Time
+              </button>
+            </div>
+
+            {/* Time Entries List */}
+            {timeEntries.length === 0 ? (
+              <div className="text-center py-12 text-slate-500 dark:text-slate-400">
+                <Clock className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                <p>No time logged yet</p>
+                <p className="text-sm">Click "Log Time" to add your first entry</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {timeEntries.map(entry => (
+                  <div
+                    key={entry.id}
+                    className="flex items-center justify-between p-4 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700"
+                  >
+                    <div className="flex-1">
+                      <p className="font-medium text-slate-900 dark:text-white">{entry.description}</p>
+                      <p className="text-sm text-slate-500 dark:text-slate-400">
+                        {new Date(entry.date).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <span className="text-lg font-semibold text-primary-600 dark:text-primary-400">
+                        {formatDuration(entry.duration)}
+                      </span>
+                      <button
+                        onClick={() => handleDeleteTimeEntry(entry.id)}
+                        className="p-2 text-slate-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+                        title="Delete entry"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Add Time Modal */}
+            {showAddTimeModal && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+                <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xl max-w-md w-full p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Log Time</h3>
+                    <button
+                      onClick={() => setShowAddTimeModal(false)}
+                      className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                    >
+                      <X className="h-5 w-5" />
+                    </button>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                        Description
+                      </label>
+                      <input
+                        type="text"
+                        value={newTimeDescription}
+                        onChange={e => setNewTimeDescription(e.target.value)}
+                        placeholder="What did you work on?"
+                        className="input w-full"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                        Duration
+                      </label>
+                      <div className="flex gap-2">
+                        <div className="flex-1">
+                          <input
+                            type="number"
+                            min="0"
+                            value={newTimeHours}
+                            onChange={e => setNewTimeHours(e.target.value)}
+                            placeholder="0"
+                            className="input w-full"
+                          />
+                          <p className="text-xs text-slate-500 mt-1">Hours</p>
+                        </div>
+                        <div className="flex-1">
+                          <input
+                            type="number"
+                            min="0"
+                            max="59"
+                            value={newTimeMinutes}
+                            onChange={e => setNewTimeMinutes(e.target.value)}
+                            placeholder="0"
+                            className="input w-full"
+                          />
+                          <p className="text-xs text-slate-500 mt-1">Minutes</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                        Date
+                      </label>
+                      <input
+                        type="date"
+                        value={newTimeDate}
+                        onChange={e => setNewTimeDate(e.target.value)}
+                        className="input w-full"
+                      />
+                    </div>
+
+                    <div className="flex gap-3 pt-2">
+                      <button
+                        onClick={() => setShowAddTimeModal(false)}
+                        className="btn-outline flex-1"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleAddTimeEntry}
+                        disabled={addingTime}
+                        className="btn-primary flex-1"
+                      >
+                        {addingTime ? 'Saving...' : 'Save'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
           </div>
