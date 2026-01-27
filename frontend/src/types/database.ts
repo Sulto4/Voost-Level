@@ -485,3 +485,43 @@ export type TaskStatus = Database['public']['Enums']['task_status']
 export type TaskPriority = Database['public']['Enums']['task_priority']
 export type WorkspaceRole = Database['public']['Enums']['workspace_role']
 export type ActivityType = Database['public']['Enums']['activity_type']
+
+// Custom field type definitions
+export type CustomFieldType = 'text' | 'number' | 'dropdown' | 'date'
+
+export interface CustomFieldDefinition {
+  id: string
+  name: string
+  type: CustomFieldType
+  options?: string[] // For dropdown type
+  required?: boolean
+}
+
+export interface WorkspaceCustomFields {
+  fields: CustomFieldDefinition[]
+}
+
+// Lead Scoring types
+export type LeadScoringCriteriaType =
+  | 'has_email'
+  | 'has_phone'
+  | 'has_company'
+  | 'has_website'
+  | 'has_value'
+  | 'value_above'
+  | 'source_equals'
+  | 'has_projects'
+  | 'recent_activity'
+
+export interface LeadScoringRule {
+  id: string
+  type: LeadScoringCriteriaType
+  points: number
+  enabled: boolean
+  value?: string | number // For rules that need a comparison value (e.g., value_above, source_equals)
+}
+
+export interface LeadScoringConfig {
+  enabled: boolean
+  rules: LeadScoringRule[]
+}

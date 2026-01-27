@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, Link, useNavigate, useLocation } from 'react-router-dom'
-import { ArrowLeft, Edit, Trash2, Mail, Phone, Globe, Building2, Plus, Calendar, DollarSign, MessageSquare, Users, CheckSquare, Download, Code, Star, User, RotateCcw, Filter, X, Pin } from 'lucide-react'
+import { ArrowLeft, Edit, Trash2, Mail, Phone, Globe, Building2, Plus, Calendar, DollarSign, MessageSquare, Users, CheckSquare, Download, Code, Star, User, RotateCcw, Filter, X, Pin, Target, ChevronDown, ChevronUp } from 'lucide-react'
 import { clsx } from 'clsx'
 import { supabase } from '../../lib/supabase'
 import { formatRelativeTime } from '../../lib/dateUtils'
@@ -15,8 +15,9 @@ import { FileList } from '../../components/files/FileList'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { Breadcrumbs } from '../../components/ui/Breadcrumbs'
 import { useWorkspace } from '../../context/WorkspaceContext'
-import type { Client, Project, Activity, ActivityType, ClientContact, File as FileType } from '../../types/database'
+import type { Client, Project, Activity, ActivityType, ClientContact, File as FileType, LeadScoringConfig } from '../../types/database'
 import { getClientContext, type AIContextExport } from '../../services/aiContextService'
+import { calculateLeadScore, getScoreColor, getScoreLabel, type LeadScoreResult } from '../../lib/leadScoring'
 
 const tabs = ['Overview', 'Contacts', 'Projects', 'Activity', 'Files']
 
@@ -224,6 +225,10 @@ export function ClientDetailPage() {
   const { currentWorkspace, currentRole } = useWorkspace()
   const canEdit = currentRole !== 'viewer'
 
+  // Lead scoring state
+  const [leadScore, setLeadScore] = useState<LeadScoreResult | null>(null)
+  const [showScoreBreakdown, setShowScoreBreakdown] = useState(false)
+
   // Favorites functionality (per-user, stored in localStorage)
   const [isFavorite, setIsFavorite] = useState(false)
 
@@ -313,6 +318,30 @@ export function ClientDetailPage() {
       fetchFiles()
     }
   }, [id])
+
+  // Calculate lead score when client, projects, activities, or workspace changes
+  useEffect(() => {
+    if (client && currentWorkspace) {
+      const settings = currentWorkspace.settings as { leadScoring?: LeadScoringConfig } | null
+      const config = settings?.leadScoring
+
+      // Check if there are projects
+      const hasProjects = projects.length > 0
+
+      // Check for recent activity (within last 30 days)
+      const thirtyDaysAgo = new Date()
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+      const hasRecentActivity = activities.some(a => new Date(a.created_at) >= thirtyDaysAgo)
+
+      const score = calculateLeadScore(client, config, {
+        hasProjects,
+        hasRecentActivity,
+      })
+      setLeadScore(score)
+    } else {
+      setLeadScore(null)
+    }
+  }, [client, projects, activities, currentWorkspace])
 
   async function fetchClient() {
     setLoading(true)
@@ -869,6 +898,123 @@ export function ClientDetailPage() {
                 </dl>
               </div>
             </div>
+
+            {/* Lead Score Section */}
+            {leadScore && leadScore.maxScore > 0 && (
+              <div className="mt-6">
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+                    <Target className="h-5 w-5 text-primary-500" />
+                    Lead Score
+                  </h2>
+                  <button
+                    onClick={() => setShowScoreBreakdown(!showScoreBreakdown)}
+                    className="text-sm text-primary-600 hover:text-primary-700 dark:text-primary-400 flex items-center gap-1"
+                  >
+                    {showScoreBreakdown ? 'Hide' : 'Show'} breakdown
+                    {showScoreBreakdown ? (
+                      <ChevronUp className="h-4 w-4" />
+                    ) : (
+                      <ChevronDown className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
+                <div className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-4">
+                  <div className="flex items-center gap-4">
+                    <div className={clsx(
+                      'text-3xl font-bold px-4 py-2 rounded-lg',
+                      getScoreColor(leadScore.percentage)
+                    )}>
+                      {leadScore.score}
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm text-slate-600 dark:text-slate-300">
+                          {getScoreLabel(leadScore.percentage)} Lead
+                        </span>
+                        <span className="text-sm text-slate-500">
+                          {leadScore.score} / {leadScore.maxScore} points ({leadScore.percentage}%)
+                        </span>
+                      </div>
+                      <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2.5">
+                        <div
+                          className={clsx(
+                            'h-2.5 rounded-full transition-all',
+                            leadScore.percentage >= 80 ? 'bg-green-500' :
+                            leadScore.percentage >= 60 ? 'bg-emerald-500' :
+                            leadScore.percentage >= 40 ? 'bg-yellow-500' :
+                            leadScore.percentage >= 20 ? 'bg-orange-500' : 'bg-red-500'
+                          )}
+                          style={{ width: `${leadScore.percentage}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Score Breakdown */}
+                  {showScoreBreakdown && (
+                    <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+                      <h4 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">
+                        Score Breakdown
+                      </h4>
+                      <div className="space-y-2">
+                        {leadScore.breakdown.map((item, index) => {
+                          const criteriaLabels: Record<string, string> = {
+                            'has_email': 'Has Email',
+                            'has_phone': 'Has Phone',
+                            'has_company': 'Has Company',
+                            'has_website': 'Has Website',
+                            'has_value': 'Has Deal Value',
+                            'value_above': `Deal Value ≥ $${item.rule.value ? Number(item.rule.value).toLocaleString() : '0'}`,
+                            'source_equals': `Source = ${item.rule.value || 'N/A'}`,
+                            'has_projects': 'Has Projects',
+                            'recent_activity': 'Recent Activity (30 days)',
+                          }
+                          return (
+                            <div
+                              key={index}
+                              className={clsx(
+                                'flex items-center justify-between py-1.5 px-2 rounded',
+                                item.matched
+                                  ? 'bg-green-50 dark:bg-green-900/20'
+                                  : 'bg-slate-100 dark:bg-slate-800'
+                              )}
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className={clsx(
+                                  'w-4 h-4 rounded-full flex items-center justify-center text-xs',
+                                  item.matched
+                                    ? 'bg-green-500 text-white'
+                                    : 'bg-slate-300 dark:bg-slate-600 text-slate-500 dark:text-slate-400'
+                                )}>
+                                  {item.matched ? '✓' : '×'}
+                                </span>
+                                <span className={clsx(
+                                  'text-sm',
+                                  item.matched
+                                    ? 'text-green-700 dark:text-green-300'
+                                    : 'text-slate-500 dark:text-slate-400'
+                                )}>
+                                  {criteriaLabels[item.rule.type] || item.rule.type}
+                                </span>
+                              </div>
+                              <span className={clsx(
+                                'text-sm font-medium',
+                                item.matched
+                                  ? 'text-green-600 dark:text-green-400'
+                                  : 'text-slate-400 dark:text-slate-500'
+                              )}>
+                                {item.matched ? `+${item.points}` : `+0 / ${item.rule.points}`}
+                              </span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Custom Fields Section */}
             {client.custom_fields && typeof client.custom_fields === 'object' && Object.keys(client.custom_fields).length > 0 && (

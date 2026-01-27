@@ -1,18 +1,20 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { User, Building2, Palette, Bell, Shield, Webhook, Plus, Trash2, Check, X, AlertTriangle, UserCog, ClipboardList, Phone, Mail, Calendar, FileText, RefreshCw, Upload, Camera, Sparkles, HelpCircle, ChevronDown, ChevronUp, Smartphone } from 'lucide-react'
+import { User, Building2, Palette, Bell, Shield, Webhook, Plus, Trash2, Check, X, AlertTriangle, UserCog, ClipboardList, Phone, Mail, Calendar, FileText, RefreshCw, Upload, Camera, Sparkles, HelpCircle, ChevronDown, ChevronUp, Smartphone, Settings2, Edit2, GripVertical, Target } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 import { useWorkspace } from '../context/WorkspaceContext'
 import { useToast } from '../context/ToastContext'
 import { supabase } from '../lib/supabase'
-import type { Webhook as WebhookType, WorkspaceMember, Activity } from '../types/database'
+import type { Webhook as WebhookType, WorkspaceMember, Activity, CustomFieldDefinition, CustomFieldType, WorkspaceCustomFields, LeadScoringRule, LeadScoringConfig, LeadScoringCriteriaType } from '../types/database'
 import { PWAInstallSection } from '../components/pwa/PWAInstallBanner'
 
 const tabs = [
   { name: 'Profile', icon: User },
   { name: 'Workspace', icon: Building2 },
+  { name: 'Custom Fields', icon: Settings2 },
+  { name: 'Lead Scoring', icon: Target },
   { name: 'Appearance', icon: Palette },
   { name: 'Notifications', icon: Bell },
   { name: 'Integrations', icon: Webhook },
@@ -20,6 +22,39 @@ const tabs = [
   { name: 'Audit Log', icon: ClipboardList },
   { name: "What's New", icon: Sparkles },
   { name: 'Help', icon: HelpCircle },
+]
+
+// Custom field type options
+const customFieldTypeOptions: { value: CustomFieldType; label: string; description: string }[] = [
+  { value: 'text', label: 'Text', description: 'Free-form text input' },
+  { value: 'number', label: 'Number', description: 'Numeric values only' },
+  { value: 'dropdown', label: 'Dropdown', description: 'Select from predefined options' },
+  { value: 'date', label: 'Date', description: 'Date picker' },
+]
+
+// Lead scoring criteria options
+const leadScoringCriteriaOptions: { value: LeadScoringCriteriaType; label: string; description: string; hasValue?: boolean; valueLabel?: string }[] = [
+  { value: 'has_email', label: 'Has Email', description: 'Client has an email address' },
+  { value: 'has_phone', label: 'Has Phone', description: 'Client has a phone number' },
+  { value: 'has_company', label: 'Has Company', description: 'Client has a company name' },
+  { value: 'has_website', label: 'Has Website', description: 'Client has a website URL' },
+  { value: 'has_value', label: 'Has Deal Value', description: 'Client has a deal value set' },
+  { value: 'value_above', label: 'Deal Value Above', description: 'Deal value is above a threshold', hasValue: true, valueLabel: 'Minimum value ($)' },
+  { value: 'source_equals', label: 'Source Equals', description: 'Lead source matches a specific value', hasValue: true, valueLabel: 'Source name' },
+  { value: 'has_projects', label: 'Has Projects', description: 'Client has one or more projects' },
+  { value: 'recent_activity', label: 'Recent Activity', description: 'Has activity in last 30 days' },
+]
+
+// Default lead scoring rules
+const defaultLeadScoringRules: LeadScoringRule[] = [
+  { id: '1', type: 'has_email', points: 10, enabled: true },
+  { id: '2', type: 'has_phone', points: 10, enabled: true },
+  { id: '3', type: 'has_company', points: 5, enabled: true },
+  { id: '4', type: 'has_website', points: 5, enabled: false },
+  { id: '5', type: 'has_value', points: 15, enabled: true },
+  { id: '6', type: 'value_above', points: 20, enabled: false, value: 10000 },
+  { id: '7', type: 'has_projects', points: 25, enabled: true },
+  { id: '8', type: 'recent_activity', points: 15, enabled: true },
 ]
 
 // Help documentation sections
@@ -200,6 +235,26 @@ export function SettingsPage() {
   const [feedbackSubmitting, setFeedbackSubmitting] = useState(false)
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false)
 
+  // Custom fields settings state
+  const [customFieldDefinitions, setCustomFieldDefinitions] = useState<CustomFieldDefinition[]>([])
+  const [customFieldsLoading, setCustomFieldsLoading] = useState(false)
+  const [showAddFieldModal, setShowAddFieldModal] = useState(false)
+  const [editingField, setEditingField] = useState<CustomFieldDefinition | null>(null)
+  const [newFieldName, setNewFieldName] = useState('')
+  const [newFieldType, setNewFieldType] = useState<CustomFieldType>('text')
+  const [newFieldOptions, setNewFieldOptions] = useState('')
+  const [newFieldRequired, setNewFieldRequired] = useState(false)
+  const [customFieldSaving, setCustomFieldSaving] = useState(false)
+
+  // Lead scoring state
+  const [leadScoringEnabled, setLeadScoringEnabled] = useState(false)
+  const [leadScoringRules, setLeadScoringRules] = useState<LeadScoringRule[]>(defaultLeadScoringRules)
+  const [leadScoringSaving, setLeadScoringSaving] = useState(false)
+  const [showAddRuleModal, setShowAddRuleModal] = useState(false)
+  const [newRuleType, setNewRuleType] = useState<LeadScoringCriteriaType>('has_email')
+  const [newRulePoints, setNewRulePoints] = useState(10)
+  const [newRuleValue, setNewRuleValue] = useState('')
+
   // Update workspace form when currentWorkspace changes
   useEffect(() => {
     if (currentWorkspace) {
@@ -219,6 +274,20 @@ export function SettingsPage() {
   useEffect(() => {
     if (activeTab === 'Audit Log' && currentWorkspace) {
       fetchAuditLogs()
+    }
+  }, [activeTab, currentWorkspace])
+
+  // Fetch custom field definitions when tab changes to Custom Fields
+  useEffect(() => {
+    if (activeTab === 'Custom Fields' && currentWorkspace) {
+      fetchCustomFields()
+    }
+  }, [activeTab, currentWorkspace])
+
+  // Fetch lead scoring config when tab changes to Lead Scoring
+  useEffect(() => {
+    if (activeTab === 'Lead Scoring' && currentWorkspace) {
+      fetchLeadScoringConfig()
     }
   }, [activeTab, currentWorkspace])
 
@@ -273,6 +342,196 @@ export function SettingsPage() {
 
     setAuditLogs(logsWithNames)
     setAuditLogsLoading(false)
+  }
+
+  async function fetchCustomFields() {
+    if (!currentWorkspace) return
+    setCustomFieldsLoading(true)
+
+    // Custom fields are stored in workspace settings
+    const settings = currentWorkspace.settings as WorkspaceCustomFields | null
+    const fields = settings?.fields || []
+    setCustomFieldDefinitions(fields)
+    setCustomFieldsLoading(false)
+  }
+
+  function generateFieldId() {
+    return `field_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
+  }
+
+  async function handleSaveCustomField() {
+    if (!currentWorkspace || !newFieldName.trim()) return
+    setCustomFieldSaving(true)
+
+    const newField: CustomFieldDefinition = {
+      id: editingField?.id || generateFieldId(),
+      name: newFieldName.trim(),
+      type: newFieldType,
+      required: newFieldRequired,
+    }
+
+    // Add options for dropdown type
+    if (newFieldType === 'dropdown' && newFieldOptions.trim()) {
+      newField.options = newFieldOptions.split(',').map(opt => opt.trim()).filter(Boolean)
+    }
+
+    let updatedFields: CustomFieldDefinition[]
+    if (editingField) {
+      // Update existing field
+      updatedFields = customFieldDefinitions.map(f => f.id === editingField.id ? newField : f)
+    } else {
+      // Add new field
+      updatedFields = [...customFieldDefinitions, newField]
+    }
+
+    const newSettings: WorkspaceCustomFields = {
+      ...((currentWorkspace.settings as WorkspaceCustomFields) || {}),
+      fields: updatedFields,
+    }
+
+    const { error } = await updateWorkspace(currentWorkspace.id, { settings: newSettings })
+
+    if (!error) {
+      setCustomFieldDefinitions(updatedFields)
+      resetCustomFieldForm()
+      showSuccess(editingField ? 'Custom field updated!' : 'Custom field added!')
+    } else {
+      showError('Failed to save custom field')
+    }
+
+    setCustomFieldSaving(false)
+  }
+
+  async function handleDeleteCustomField(fieldId: string) {
+    if (!currentWorkspace) return
+
+    const updatedFields = customFieldDefinitions.filter(f => f.id !== fieldId)
+    const newSettings: WorkspaceCustomFields = {
+      ...((currentWorkspace.settings as WorkspaceCustomFields) || {}),
+      fields: updatedFields,
+    }
+
+    const { error } = await updateWorkspace(currentWorkspace.id, { settings: newSettings })
+
+    if (!error) {
+      setCustomFieldDefinitions(updatedFields)
+      showSuccess('Custom field deleted')
+    } else {
+      showError('Failed to delete custom field')
+    }
+  }
+
+  function resetCustomFieldForm() {
+    setNewFieldName('')
+    setNewFieldType('text')
+    setNewFieldOptions('')
+    setNewFieldRequired(false)
+    setEditingField(null)
+    setShowAddFieldModal(false)
+  }
+
+  function startEditField(field: CustomFieldDefinition) {
+    setEditingField(field)
+    setNewFieldName(field.name)
+    setNewFieldType(field.type)
+    setNewFieldOptions(field.options?.join(', ') || '')
+    setNewFieldRequired(field.required || false)
+    setShowAddFieldModal(true)
+  }
+
+  // Lead scoring functions
+  async function fetchLeadScoringConfig() {
+    if (!currentWorkspace) return
+
+    // Lead scoring config is stored in workspace settings
+    const settings = currentWorkspace.settings as { leadScoring?: LeadScoringConfig } | null
+    if (settings?.leadScoring) {
+      setLeadScoringEnabled(settings.leadScoring.enabled)
+      setLeadScoringRules(settings.leadScoring.rules)
+    } else {
+      setLeadScoringEnabled(false)
+      setLeadScoringRules(defaultLeadScoringRules)
+    }
+  }
+
+  async function saveLeadScoringConfig() {
+    if (!currentWorkspace) return
+    setLeadScoringSaving(true)
+
+    const leadScoringConfig: LeadScoringConfig = {
+      enabled: leadScoringEnabled,
+      rules: leadScoringRules,
+    }
+
+    const newSettings = {
+      ...((currentWorkspace.settings as object) || {}),
+      leadScoring: leadScoringConfig,
+    }
+
+    const { error } = await updateWorkspace(currentWorkspace.id, { settings: newSettings })
+
+    if (!error) {
+      showSuccess('Lead scoring settings saved!')
+    } else {
+      showError('Failed to save lead scoring settings')
+    }
+
+    setLeadScoringSaving(false)
+  }
+
+  function toggleLeadScoringEnabled() {
+    setLeadScoringEnabled(!leadScoringEnabled)
+  }
+
+  function toggleRuleEnabled(ruleId: string) {
+    setLeadScoringRules(rules =>
+      rules.map(rule =>
+        rule.id === ruleId ? { ...rule, enabled: !rule.enabled } : rule
+      )
+    )
+  }
+
+  function updateRulePoints(ruleId: string, points: number) {
+    setLeadScoringRules(rules =>
+      rules.map(rule =>
+        rule.id === ruleId ? { ...rule, points } : rule
+      )
+    )
+  }
+
+  function updateRuleValue(ruleId: string, value: string | number) {
+    setLeadScoringRules(rules =>
+      rules.map(rule =>
+        rule.id === ruleId ? { ...rule, value } : rule
+      )
+    )
+  }
+
+  function deleteRule(ruleId: string) {
+    setLeadScoringRules(rules => rules.filter(rule => rule.id !== ruleId))
+  }
+
+  function addNewRule() {
+    const existingRule = leadScoringRules.find(r => r.type === newRuleType)
+    if (existingRule && !['source_equals', 'value_above'].includes(newRuleType)) {
+      showError('This rule type already exists')
+      return
+    }
+
+    const newRule: LeadScoringRule = {
+      id: `rule_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+      type: newRuleType,
+      points: newRulePoints,
+      enabled: true,
+      value: newRuleValue || undefined,
+    }
+
+    setLeadScoringRules([...leadScoringRules, newRule])
+    setShowAddRuleModal(false)
+    setNewRuleType('has_email')
+    setNewRulePoints(10)
+    setNewRuleValue('')
+    showSuccess('Rule added!')
   }
 
   async function handleAddWebhook() {
@@ -1099,6 +1358,426 @@ export function SettingsPage() {
                     </div>
                   </div>
                 </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'Custom Fields' && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+                    Custom Fields
+                  </h2>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    Define custom fields for client records with different data types
+                  </p>
+                </div>
+                {(currentRole === 'owner' || currentRole === 'admin') && (
+                  <button
+                    onClick={() => {
+                      resetCustomFieldForm()
+                      setShowAddFieldModal(true)
+                    }}
+                    className="btn-primary"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Field
+                  </button>
+                )}
+              </div>
+
+              {/* Add/Edit Field Modal */}
+              {showAddFieldModal && (
+                <div className="card p-4 border-2 border-primary-200 dark:border-primary-800">
+                  <h3 className="font-medium text-slate-900 dark:text-white mb-4">
+                    {editingField ? 'Edit Custom Field' : 'New Custom Field'}
+                  </h3>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="label">Field Name</label>
+                      <input
+                        type="text"
+                        value={newFieldName}
+                        onChange={(e) => setNewFieldName(e.target.value)}
+                        placeholder="e.g., Industry, Contract Date, Budget"
+                        className="input"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="label">Field Type</label>
+                      <div className="grid grid-cols-2 gap-2 mt-2">
+                        {customFieldTypeOptions.map((type) => (
+                          <button
+                            key={type.value}
+                            type="button"
+                            onClick={() => setNewFieldType(type.value)}
+                            className={clsx(
+                              'p-3 rounded-lg border text-left transition-colors',
+                              newFieldType === type.value
+                                ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
+                                : 'border-slate-200 dark:border-slate-700 hover:border-slate-300'
+                            )}
+                          >
+                            <div className="font-medium text-slate-900 dark:text-white text-sm">
+                              {type.label}
+                            </div>
+                            <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                              {type.description}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {newFieldType === 'dropdown' && (
+                      <div>
+                        <label className="label">Dropdown Options</label>
+                        <input
+                          type="text"
+                          value={newFieldOptions}
+                          onChange={(e) => setNewFieldOptions(e.target.value)}
+                          placeholder="Option 1, Option 2, Option 3 (comma-separated)"
+                          className="input"
+                        />
+                        <p className="text-xs text-slate-500 mt-1">
+                          Enter options separated by commas
+                        </p>
+                      </div>
+                    )}
+
+                    <div>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={newFieldRequired}
+                          onChange={(e) => setNewFieldRequired(e.target.checked)}
+                          className="h-4 w-4 rounded text-primary-600"
+                        />
+                        <span className="text-sm text-slate-700 dark:text-slate-300">
+                          Required field
+                        </span>
+                      </label>
+                    </div>
+
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleSaveCustomField}
+                        disabled={customFieldSaving || !newFieldName.trim() || (newFieldType === 'dropdown' && !newFieldOptions.trim())}
+                        className="btn-primary"
+                      >
+                        {customFieldSaving ? 'Saving...' : (editingField ? 'Update Field' : 'Add Field')}
+                      </button>
+                      <button
+                        onClick={resetCustomFieldForm}
+                        className="btn-outline"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Custom Fields List */}
+              {customFieldsLoading ? (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+                </div>
+              ) : customFieldDefinitions.length === 0 ? (
+                <div className="text-center py-8 text-slate-500 dark:text-slate-400">
+                  <Settings2 className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                  <p>No custom fields defined yet</p>
+                  <p className="text-sm">Add custom fields to capture additional client information</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {customFieldDefinitions.map((field) => (
+                    <div
+                      key={field.id}
+                      className="card p-4 flex items-center justify-between"
+                    >
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <div className="p-2 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
+                          <GripVertical className="h-4 w-4" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-medium text-slate-900 dark:text-white truncate">
+                              {field.name}
+                            </h4>
+                            {field.required && (
+                              <span className="px-2 py-0.5 text-xs rounded-full bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300">
+                                Required
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="px-2 py-0.5 text-xs rounded-full bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300 capitalize">
+                              {field.type}
+                            </span>
+                            {field.type === 'dropdown' && field.options && (
+                              <span className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                                Options: {field.options.join(', ')}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      {(currentRole === 'owner' || currentRole === 'admin') && (
+                        <div className="flex items-center gap-2 ml-4">
+                          <button
+                            onClick={() => startEditField(field)}
+                            className="icon-btn"
+                            title="Edit"
+                          >
+                            <Edit2 className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteCustomField(field.id)}
+                            className="icon-btn text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+                            title="Delete"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {currentRole !== 'owner' && currentRole !== 'admin' && (
+                <p className="text-slate-500 dark:text-slate-400 text-sm">
+                  You don't have permission to manage custom fields. Contact your workspace admin.
+                </p>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'Lead Scoring' && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+                    Lead Scoring
+                  </h2>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    Configure rules to automatically score leads based on their data completeness and engagement
+                  </p>
+                </div>
+                <button
+                  onClick={toggleLeadScoringEnabled}
+                  className={clsx(
+                    'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
+                    leadScoringEnabled ? 'bg-primary-600' : 'bg-slate-300 dark:bg-slate-600'
+                  )}
+                >
+                  <span
+                    className={clsx(
+                      'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
+                      leadScoringEnabled ? 'translate-x-6' : 'translate-x-1'
+                    )}
+                  />
+                </button>
+              </div>
+
+              {leadScoringEnabled && (
+                <>
+                  {/* Add Rule Button */}
+                  {(currentRole === 'owner' || currentRole === 'admin') && (
+                    <div className="flex justify-end">
+                      <button
+                        onClick={() => setShowAddRuleModal(true)}
+                        className="btn-outline"
+                      >
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add Rule
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Add Rule Modal */}
+                  {showAddRuleModal && (
+                    <div className="card p-4 border-2 border-primary-200 dark:border-primary-800">
+                      <h3 className="font-medium text-slate-900 dark:text-white mb-4">
+                        Add Scoring Rule
+                      </h3>
+                      <div className="space-y-4">
+                        <div>
+                          <label className="label">Criteria</label>
+                          <select
+                            value={newRuleType}
+                            onChange={(e) => {
+                              setNewRuleType(e.target.value as LeadScoringCriteriaType)
+                              setNewRuleValue('')
+                            }}
+                            className="input"
+                          >
+                            {leadScoringCriteriaOptions.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label} - {option.description}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {leadScoringCriteriaOptions.find(o => o.value === newRuleType)?.hasValue && (
+                          <div>
+                            <label className="label">
+                              {leadScoringCriteriaOptions.find(o => o.value === newRuleType)?.valueLabel}
+                            </label>
+                            <input
+                              type={newRuleType === 'value_above' ? 'number' : 'text'}
+                              value={newRuleValue}
+                              onChange={(e) => setNewRuleValue(e.target.value)}
+                              placeholder={newRuleType === 'value_above' ? 'Enter minimum value' : 'Enter value'}
+                              className="input"
+                            />
+                          </div>
+                        )}
+
+                        <div>
+                          <label className="label">Points</label>
+                          <input
+                            type="number"
+                            value={newRulePoints}
+                            onChange={(e) => setNewRulePoints(parseInt(e.target.value) || 0)}
+                            min={1}
+                            max={100}
+                            className="input w-32"
+                          />
+                        </div>
+
+                        <div className="flex gap-2">
+                          <button
+                            onClick={addNewRule}
+                            disabled={!newRuleType || (leadScoringCriteriaOptions.find(o => o.value === newRuleType)?.hasValue && !newRuleValue)}
+                            className="btn-primary"
+                          >
+                            Add Rule
+                          </button>
+                          <button
+                            onClick={() => {
+                              setShowAddRuleModal(false)
+                              setNewRuleType('has_email')
+                              setNewRulePoints(10)
+                              setNewRuleValue('')
+                            }}
+                            className="btn-outline"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Rules List */}
+                  <div className="space-y-3">
+                    {leadScoringRules.map((rule) => {
+                      const criteriaOption = leadScoringCriteriaOptions.find(o => o.value === rule.type)
+                      return (
+                        <div
+                          key={rule.id}
+                          className={clsx(
+                            'card p-4 flex items-center justify-between',
+                            !rule.enabled && 'opacity-50'
+                          )}
+                        >
+                          <div className="flex items-center gap-4 flex-1">
+                            <button
+                              onClick={() => toggleRuleEnabled(rule.id)}
+                              className={clsx(
+                                'relative inline-flex h-5 w-9 items-center rounded-full transition-colors',
+                                rule.enabled ? 'bg-primary-600' : 'bg-slate-300 dark:bg-slate-600'
+                              )}
+                            >
+                              <span
+                                className={clsx(
+                                  'inline-block h-3 w-3 transform rounded-full bg-white transition-transform',
+                                  rule.enabled ? 'translate-x-5' : 'translate-x-1'
+                                )}
+                              />
+                            </button>
+                            <div className="flex-1">
+                              <div className="font-medium text-slate-900 dark:text-white">
+                                {criteriaOption?.label || rule.type}
+                              </div>
+                              <div className="text-sm text-slate-500 dark:text-slate-400">
+                                {criteriaOption?.description}
+                                {rule.value && `: ${rule.type === 'value_above' ? '$' + Number(rule.value).toLocaleString() : rule.value}`}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm text-slate-500">Points:</span>
+                              <input
+                                type="number"
+                                value={rule.points}
+                                onChange={(e) => updateRulePoints(rule.id, parseInt(e.target.value) || 0)}
+                                min={1}
+                                max={100}
+                                className="input w-20 text-center"
+                              />
+                            </div>
+                            {(currentRole === 'owner' || currentRole === 'admin') && (
+                              <button
+                                onClick={() => deleteRule(rule.id)}
+                                className="icon-btn text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                title="Delete rule"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+
+                  {/* Save Button */}
+                  {(currentRole === 'owner' || currentRole === 'admin') && (
+                    <div className="flex justify-end pt-4 border-t border-slate-200 dark:border-slate-700">
+                      <button
+                        onClick={saveLeadScoringConfig}
+                        disabled={leadScoringSaving}
+                        className="btn-primary"
+                      >
+                        {leadScoringSaving ? 'Saving...' : 'Save Lead Scoring Rules'}
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Max Score Info */}
+                  <div className="card p-4 bg-slate-50 dark:bg-slate-800/50">
+                    <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+                      <Target className="h-4 w-4" />
+                      <span>
+                        Maximum possible score:{' '}
+                        <strong>
+                          {leadScoringRules.filter(r => r.enabled).reduce((sum, r) => sum + r.points, 0)} points
+                        </strong>
+                      </span>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {!leadScoringEnabled && (
+                <div className="text-center py-8 text-slate-500 dark:text-slate-400">
+                  <Target className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                  <p>Lead scoring is disabled</p>
+                  <p className="text-sm">Enable to automatically score leads based on configurable criteria</p>
+                </div>
+              )}
+
+              {currentRole !== 'owner' && currentRole !== 'admin' && (
+                <p className="text-slate-500 dark:text-slate-400 text-sm">
+                  You don't have permission to manage lead scoring. Contact your workspace admin.
+                </p>
               )}
             </div>
           )}
