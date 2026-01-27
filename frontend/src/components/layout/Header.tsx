@@ -49,6 +49,41 @@ export function Header({ onMenuClick }: HeaderProps) {
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [notificationsLoading, setNotificationsLoading] = useState(false)
   const notificationsRef = useRef<HTMLDivElement>(null)
+  const [readNotificationIds, setReadNotificationIds] = useState<Set<string>>(new Set())
+
+  // Load read notifications from localStorage
+  useEffect(() => {
+    const stored = localStorage.getItem('readNotifications')
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored)
+        setReadNotificationIds(new Set(parsed))
+      } catch (e) {
+        // Invalid JSON, reset
+        localStorage.removeItem('readNotifications')
+      }
+    }
+  }, [])
+
+  // Save read notifications to localStorage
+  const markNotificationAsRead = (notificationId: string) => {
+    setReadNotificationIds(prev => {
+      const newSet = new Set(prev)
+      newSet.add(notificationId)
+      localStorage.setItem('readNotifications', JSON.stringify([...newSet]))
+      return newSet
+    })
+  }
+
+  // Mark all as read
+  const markAllNotificationsAsRead = () => {
+    const allIds = notifications.map(n => n.id)
+    setReadNotificationIds(new Set(allIds))
+    localStorage.setItem('readNotifications', JSON.stringify(allIds))
+  }
+
+  // Get unread count
+  const unreadCount = notifications.filter(n => !readNotificationIds.has(n.id)).length
 
   // Fetch overdue tasks for notifications
   const fetchOverdueTasks = async () => {
@@ -356,8 +391,10 @@ export function Header({ onMenuClick }: HeaderProps) {
               aria-label="Notifications"
             >
               <Bell className="h-5 w-5" />
-              {notifications.length > 0 && (
-                <span className="absolute top-1.5 right-1.5 h-2 w-2 bg-red-500 rounded-full" />
+              {unreadCount > 0 && (
+                <span className="absolute top-0.5 right-0.5 min-w-[18px] h-[18px] px-1 bg-red-500 rounded-full flex items-center justify-center text-[10px] font-bold text-white">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
               )}
             </button>
 
@@ -365,11 +402,21 @@ export function Header({ onMenuClick }: HeaderProps) {
               <div className="absolute right-0 mt-2 w-96 bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 py-2 animate-fade-in">
                 <div className="px-4 py-2 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
                   <h3 className="font-semibold text-slate-900 dark:text-white">Notifications</h3>
-                  {notifications.length > 0 && (
-                    <span className="text-xs px-2 py-0.5 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-full">
-                      {notifications.length} overdue
-                    </span>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {unreadCount > 0 && (
+                      <span className="text-xs px-2 py-0.5 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-full">
+                        {unreadCount} unread
+                      </span>
+                    )}
+                    {unreadCount > 0 && (
+                      <button
+                        onClick={markAllNotificationsAsRead}
+                        className="text-xs text-primary-600 dark:text-primary-400 hover:underline"
+                      >
+                        Mark all read
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <div className="max-h-96 overflow-y-auto">
                   {notificationsLoading ? (
@@ -385,31 +432,40 @@ export function Header({ onMenuClick }: HeaderProps) {
                     </div>
                   ) : (
                     <div className="py-1">
-                      {notifications.map((notification) => (
-                        <button
-                          key={notification.id}
-                          onClick={() => {
-                            if (notification.link) {
-                              navigate(notification.link)
-                              setShowNotifications(false)
-                            }
-                          }}
-                          className="w-full flex items-start gap-3 px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors text-left border-b border-slate-100 dark:border-slate-700/50 last:border-0"
-                        >
-                          <div className="p-2 rounded-lg bg-red-100 dark:bg-red-900/30 flex-shrink-0">
-                            <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-slate-900 dark:text-white truncate">
-                              {notification.title}
-                            </p>
-                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                              {notification.subtitle}
-                            </p>
-                          </div>
-                          <Clock className="h-4 w-4 text-slate-400 flex-shrink-0 mt-0.5" />
-                        </button>
-                      ))}
+                      {notifications.map((notification) => {
+                        const isRead = readNotificationIds.has(notification.id)
+                        return (
+                          <button
+                            key={notification.id}
+                            onClick={() => {
+                              markNotificationAsRead(notification.id)
+                              if (notification.link) {
+                                navigate(notification.link)
+                                setShowNotifications(false)
+                              }
+                            }}
+                            className={`w-full flex items-start gap-3 px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors text-left border-b border-slate-100 dark:border-slate-700/50 last:border-0 ${
+                              !isRead ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''
+                            }`}
+                          >
+                            <div className="p-2 rounded-lg bg-red-100 dark:bg-red-900/30 flex-shrink-0 relative">
+                              <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400" />
+                              {!isRead && (
+                                <span className="absolute -top-0.5 -right-0.5 h-2 w-2 bg-blue-500 rounded-full" />
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className={`text-sm truncate ${!isRead ? 'font-semibold text-slate-900 dark:text-white' : 'font-medium text-slate-700 dark:text-slate-300'}`}>
+                                {notification.title}
+                              </p>
+                              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                                {notification.subtitle}
+                              </p>
+                            </div>
+                            <Clock className="h-4 w-4 text-slate-400 flex-shrink-0 mt-0.5" />
+                          </button>
+                        )
+                      })}
                     </div>
                   )}
                 </div>
