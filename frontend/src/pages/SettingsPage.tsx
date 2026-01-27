@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { User, Building2, Palette, Bell, Shield, Webhook, Plus, Trash2, Check, X, AlertTriangle, UserCog, ClipboardList, Phone, Mail, Calendar, FileText, RefreshCw, Upload, Camera, Sparkles, HelpCircle, ChevronDown, ChevronUp, Smartphone, Settings2, Edit2, GripVertical, Target, Code2 } from 'lucide-react'
+import { User, Building2, Palette, Bell, Shield, Webhook, Plus, Trash2, Check, X, AlertTriangle, UserCog, ClipboardList, Phone, Mail, Calendar, FileText, RefreshCw, Upload, Camera, Sparkles, HelpCircle, ChevronDown, ChevronUp, Smartphone, Settings2, Edit2, GripVertical, Target, Code2, Eye, EyeOff, Copy, Key } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
@@ -263,6 +263,45 @@ export function SettingsPage() {
   const [rateLimitHeaders, setRateLimitHeaders] = useState<RateLimitHeaders | null>(null)
   const [apiTestLoading, setApiTestLoading] = useState(false)
   const [apiTestResult, setApiTestResult] = useState<{ success: boolean; message: string } | null>(null)
+
+  // API key state
+  const [apiKey, setApiKey] = useState<string | null>(() => {
+    return localStorage.getItem('voost_api_key')
+  })
+  const [apiKeyVisible, setApiKeyVisible] = useState(false)
+  const [apiKeyGenerating, setApiKeyGenerating] = useState(false)
+  const [apiKeyCopied, setApiKeyCopied] = useState(false)
+
+  // Generate a new API key
+  const generateApiKey = () => {
+    setApiKeyGenerating(true)
+    // Simulate key generation with a random string
+    const newKey = `vl_${Array.from(crypto.getRandomValues(new Uint8Array(24)))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('')}`
+    setTimeout(() => {
+      setApiKey(newKey)
+      localStorage.setItem('voost_api_key', newKey)
+      setApiKeyGenerating(false)
+      setApiKeyVisible(true)
+    }, 500)
+  }
+
+  // Rotate (regenerate) the API key
+  const rotateApiKey = () => {
+    if (confirm('Are you sure you want to rotate your API key? The old key will stop working immediately.')) {
+      generateApiKey()
+    }
+  }
+
+  // Copy API key to clipboard
+  const copyApiKey = async () => {
+    if (apiKey) {
+      await navigator.clipboard.writeText(apiKey)
+      setApiKeyCopied(true)
+      setTimeout(() => setApiKeyCopied(false), 2000)
+    }
+  }
 
   // Update workspace form when currentWorkspace changes
   useEffect(() => {
@@ -2187,7 +2226,80 @@ export function SettingsPage() {
 
           {activeTab === 'API' && (
             <div className="space-y-6">
+              {/* API Key Management */}
               <div>
+                <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+                  API Key Management
+                </h2>
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  Generate and manage your API keys for external integrations
+                </p>
+              </div>
+
+              <div className="card p-4">
+                <h3 className="font-medium text-slate-900 dark:text-white mb-4">Your API Key</h3>
+                {apiKey ? (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 p-3 bg-slate-50 dark:bg-slate-800 rounded-lg font-mono text-sm break-all">
+                        {apiKeyVisible ? apiKey : '•'.repeat(48)}
+                      </div>
+                      <button
+                        onClick={() => setApiKeyVisible(!apiKeyVisible)}
+                        className="btn-outline p-2"
+                        title={apiKeyVisible ? 'Hide key' : 'Show key'}
+                      >
+                        {apiKeyVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                      <button
+                        onClick={copyApiKey}
+                        className="btn-outline p-2"
+                        title="Copy to clipboard"
+                      >
+                        {apiKeyCopied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={rotateApiKey}
+                        className="btn-outline text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20"
+                        disabled={apiKeyGenerating}
+                      >
+                        <RefreshCw className={clsx('h-4 w-4 mr-2', apiKeyGenerating && 'animate-spin')} />
+                        Rotate Key
+                      </button>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        Rotating will invalidate your current key immediately
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <p className="text-sm text-slate-500 dark:text-slate-400">
+                      You haven't generated an API key yet. Generate one to start using the API.
+                    </p>
+                    <button
+                      onClick={generateApiKey}
+                      className="btn-primary"
+                      disabled={apiKeyGenerating}
+                    >
+                      {apiKeyGenerating ? (
+                        <>
+                          <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                          Generating...
+                        </>
+                      ) : (
+                        <>
+                          <Key className="h-4 w-4 mr-2" />
+                          Generate API Key
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className="border-t border-slate-200 dark:border-slate-700 pt-6">
                 <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
                   API Rate Limiting
                 </h2>
