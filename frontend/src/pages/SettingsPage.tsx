@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { User, Building2, Palette, Bell, Shield, Webhook, Plus, Trash2, Check, X, AlertTriangle, UserCog, ClipboardList, Phone, Mail, Calendar, FileText, RefreshCw, Upload, Camera, Sparkles, HelpCircle, ChevronDown, ChevronUp, Smartphone, Settings2, Edit2, GripVertical, Target } from 'lucide-react'
+import { User, Building2, Palette, Bell, Shield, Webhook, Plus, Trash2, Check, X, AlertTriangle, UserCog, ClipboardList, Phone, Mail, Calendar, FileText, RefreshCw, Upload, Camera, Sparkles, HelpCircle, ChevronDown, ChevronUp, Smartphone, Settings2, Edit2, GripVertical, Target, Code2 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 import { useWorkspace } from '../context/WorkspaceContext'
 import { useToast } from '../context/ToastContext'
 import { supabase } from '../lib/supabase'
+import api, { RateLimitHeaders } from '../lib/api'
 import type { Webhook as WebhookType, WorkspaceMember, Activity, CustomFieldDefinition, CustomFieldType, WorkspaceCustomFields, LeadScoringRule, LeadScoringConfig, LeadScoringCriteriaType } from '../types/database'
 import { PWAInstallSection } from '../components/pwa/PWAInstallBanner'
 
@@ -18,6 +19,7 @@ const tabs = [
   { name: 'Appearance', icon: Palette },
   { name: 'Notifications', icon: Bell },
   { name: 'Integrations', icon: Webhook },
+  { name: 'API', icon: Code2 },
   { name: 'Security', icon: Shield },
   { name: 'Audit Log', icon: ClipboardList },
   { name: "What's New", icon: Sparkles },
@@ -254,6 +256,11 @@ export function SettingsPage() {
   const [newRuleType, setNewRuleType] = useState<LeadScoringCriteriaType>('has_email')
   const [newRulePoints, setNewRulePoints] = useState(10)
   const [newRuleValue, setNewRuleValue] = useState('')
+
+  // API rate limit state
+  const [rateLimitHeaders, setRateLimitHeaders] = useState<RateLimitHeaders | null>(null)
+  const [apiTestLoading, setApiTestLoading] = useState(false)
+  const [apiTestResult, setApiTestResult] = useState<{ success: boolean; message: string } | null>(null)
 
   // Update workspace form when currentWorkspace changes
   useEffect(() => {
@@ -2062,6 +2069,182 @@ export function SettingsPage() {
                 <button className="btn-outline text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20">
                   Log Out All Sessions
                 </button>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'API' && (
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+                  API Rate Limiting
+                </h2>
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  Monitor your API usage and rate limit status
+                </p>
+              </div>
+
+              {/* Rate Limit Status */}
+              <div className="card p-4">
+                <h3 className="font-medium text-slate-900 dark:text-white mb-4">Current Rate Limit Status</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-lg">
+                    <p className="text-sm text-slate-500 dark:text-slate-400">X-RateLimit-Limit</p>
+                    <p className="text-2xl font-bold text-slate-900 dark:text-white">
+                      {rateLimitHeaders?.['X-RateLimit-Limit'] || api.getRateLimitStatus()['X-RateLimit-Limit']}
+                    </p>
+                    <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Maximum requests per window</p>
+                  </div>
+                  <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-lg">
+                    <p className="text-sm text-slate-500 dark:text-slate-400">X-RateLimit-Remaining</p>
+                    <p className="text-2xl font-bold text-green-600 dark:text-green-400">
+                      {rateLimitHeaders?.['X-RateLimit-Remaining'] || api.getRateLimitStatus()['X-RateLimit-Remaining']}
+                    </p>
+                    <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Requests remaining in window</p>
+                  </div>
+                  <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-lg">
+                    <p className="text-sm text-slate-500 dark:text-slate-400">X-RateLimit-Reset</p>
+                    <p className="text-2xl font-bold text-slate-900 dark:text-white">
+                      {rateLimitHeaders?.['X-RateLimit-Reset'] || api.getRateLimitStatus()['X-RateLimit-Reset']}
+                    </p>
+                    <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Unix timestamp of reset</p>
+                  </div>
+                </div>
+
+                {rateLimitHeaders?.['Retry-After'] && (
+                  <div className="mt-4 p-3 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800">
+                    <p className="text-sm text-red-600 dark:text-red-400">
+                      <AlertTriangle className="h-4 w-4 inline mr-2" />
+                      Rate limit exceeded. Retry after {rateLimitHeaders['Retry-After']} seconds.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Test API Request */}
+              <div className="card p-4">
+                <h3 className="font-medium text-slate-900 dark:text-white mb-4">Test API Request</h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
+                  Make a test API request to see the rate limit headers in action.
+                </p>
+                <div className="flex items-center gap-4">
+                  <button
+                    onClick={async () => {
+                      setApiTestLoading(true)
+                      setApiTestResult(null)
+                      try {
+                        const response = await api.getClients(currentWorkspace?.id || '')
+                        setRateLimitHeaders(response.headers)
+                        if (response.error) {
+                          setApiTestResult({
+                            success: false,
+                            message: response.error.message || 'Request failed'
+                          })
+                        } else {
+                          setApiTestResult({
+                            success: true,
+                            message: `Successfully fetched ${response.data?.length || 0} clients`
+                          })
+                        }
+                      } catch (error) {
+                        setApiTestResult({
+                          success: false,
+                          message: 'Request failed'
+                        })
+                      }
+                      setApiTestLoading(false)
+                    }}
+                    disabled={apiTestLoading || !currentWorkspace}
+                    className="btn-primary"
+                  >
+                    {apiTestLoading ? 'Making Request...' : 'Make Test Request'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setRateLimitHeaders(api.getRateLimitStatus())
+                      setApiTestResult(null)
+                    }}
+                    className="btn-outline"
+                  >
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Refresh Status
+                  </button>
+                </div>
+
+                {apiTestResult && (
+                  <div className={clsx(
+                    'mt-4 p-3 rounded-lg border',
+                    apiTestResult.success
+                      ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+                      : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+                  )}>
+                    <p className={clsx(
+                      'text-sm',
+                      apiTestResult.success
+                        ? 'text-green-600 dark:text-green-400'
+                        : 'text-red-600 dark:text-red-400'
+                    )}>
+                      {apiTestResult.success ? (
+                        <Check className="h-4 w-4 inline mr-2" />
+                      ) : (
+                        <X className="h-4 w-4 inline mr-2" />
+                      )}
+                      {apiTestResult.message}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Rate Limit Headers Documentation */}
+              <div className="card p-4">
+                <h3 className="font-medium text-slate-900 dark:text-white mb-4">Rate Limit Headers</h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
+                  Every API response includes these rate limiting headers:
+                </p>
+                <div className="space-y-3">
+                  <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
+                    <code className="text-sm font-mono text-primary-600 dark:text-primary-400">X-RateLimit-Limit</code>
+                    <p className="text-sm text-slate-600 dark:text-slate-300 mt-1">
+                      The maximum number of requests allowed per time window.
+                    </p>
+                  </div>
+                  <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
+                    <code className="text-sm font-mono text-primary-600 dark:text-primary-400">X-RateLimit-Remaining</code>
+                    <p className="text-sm text-slate-600 dark:text-slate-300 mt-1">
+                      The number of requests remaining in the current time window.
+                    </p>
+                  </div>
+                  <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
+                    <code className="text-sm font-mono text-primary-600 dark:text-primary-400">X-RateLimit-Reset</code>
+                    <p className="text-sm text-slate-600 dark:text-slate-300 mt-1">
+                      Unix timestamp (in seconds) when the rate limit window resets.
+                    </p>
+                  </div>
+                  <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
+                    <code className="text-sm font-mono text-primary-600 dark:text-primary-400">Retry-After</code>
+                    <p className="text-sm text-slate-600 dark:text-slate-300 mt-1">
+                      Only present when rate limited. Indicates seconds until the limit resets.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* API Rate Limit Configuration */}
+              <div className="card p-4">
+                <h3 className="font-medium text-slate-900 dark:text-white mb-4">Rate Limit Configuration</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">Requests per window</p>
+                    <p className="text-xl font-semibold text-slate-900 dark:text-white">100 requests</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">Window duration</p>
+                    <p className="text-xl font-semibold text-slate-900 dark:text-white">1 minute</p>
+                  </div>
+                </div>
+                <p className="text-xs text-slate-400 dark:text-slate-500 mt-4">
+                  Contact support if you need higher rate limits for your API integration.
+                </p>
               </div>
             </div>
           )}
