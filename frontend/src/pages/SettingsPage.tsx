@@ -10,7 +10,7 @@ import { supabase } from '../lib/supabase'
 import api, { RateLimitHeaders } from '../lib/api'
 import { getRecentDeliveries, clearRecentDeliveries, WebhookDelivery } from '../services/webhookService'
 import { getNotificationPreferences, saveNotificationPreferences, type NotificationPreferences } from '../services/emailNotificationService'
-import type { Webhook as WebhookType, WorkspaceMember, Activity, CustomFieldDefinition, CustomFieldType, WorkspaceCustomFields, LeadScoringRule, LeadScoringConfig, LeadScoringCriteriaType } from '../types/database'
+import type { Webhook as WebhookType, WorkspaceMember, Activity, CustomFieldDefinition, CustomFieldType, WorkspaceCustomFields, LeadScoringRule, LeadScoringConfig, LeadScoringCriteriaType, ApiKey, ApiKeyScope } from '../types/database'
 import { PWAInstallSection } from '../components/pwa/PWAInstallBanner'
 
 const tabs = [
@@ -266,12 +266,14 @@ export function SettingsPage() {
   const [apiTestResult, setApiTestResult] = useState<{ success: boolean; message: string } | null>(null)
 
   // API key state
-  const [apiKey, setApiKey] = useState<string | null>(() => {
-    return localStorage.getItem('voost_api_key')
-  })
+  const [apiKeys, setApiKeys] = useState<ApiKey[]>([])
+  const [apiKeysLoading, setApiKeysLoading] = useState(false)
+  const [newlyGeneratedKey, setNewlyGeneratedKey] = useState<string | null>(null)
   const [apiKeyVisible, setApiKeyVisible] = useState(false)
   const [apiKeyGenerating, setApiKeyGenerating] = useState(false)
   const [apiKeyCopied, setApiKeyCopied] = useState(false)
+  const [newKeyName, setNewKeyName] = useState('Default Key')
+  const [newKeyScopes, setNewKeyScopes] = useState<ApiKeyScope[]>(['read'])
 
   // Notification preferences state
   const [notificationPrefs, setNotificationPrefs] = useState<NotificationPreferences>(() => {
@@ -285,35 +287,91 @@ export function SettingsPage() {
     showSuccess(`Notification preference updated`)
   }
 
-  // Generate a new API key
-  const generateApiKey = () => {
-    setApiKeyGenerating(true)
-    // Simulate key generation with a random string
-    const newKey = `vl_${Array.from(crypto.getRandomValues(new Uint8Array(24)))
-      .map(b => b.toString(16).padStart(2, '0'))
-      .join('')}`
-    setTimeout(() => {
-      setApiKey(newKey)
-      localStorage.setItem('voost_api_key', newKey)
-      setApiKeyGenerating(false)
-      setApiKeyVisible(true)
-    }, 500)
+  // Fetch API keys for current workspace
+  const fetchApiKeys = async () => {
+    if (!currentWorkspace) return
+    setApiKeysLoading(true)
+    try {
+      const { data, error } = await supabase
+        .from('api_keys')
+        .select('*')
+        .eq('workspace_id', currentWorkspace.id)
+        .is('revoked_at', null)
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+      setApiKeys(data || [])
+    } catch (error) {
+      console.error('Error fetching API keys:', error)
+      showError('Failed to load API keys')
+    } finally {
+      setApiKeysLoading(false)
+    }
   }
 
-  // Rotate (regenerate) the API key
-  const rotateApiKey = () => {
-    if (confirm('Are you sure you want to rotate your API key? The old key will stop working immediately.')) {
-      generateApiKey()
+  // Generate a new API key
+  const generateApiKey = async () => {
+    if (!currentWorkspace) return
+    setApiKeyGenerating(true)
+    try {
+      const { data, error } = await supabase.rpc('generate_api_key', {
+        p_workspace_id: currentWorkspace.id,
+        p_name: newKeyName,
+        p_scopes: newKeyScopes
+      } as any)
+
+      if (error) throw error
+      const result = data as { key?: string; error?: string } | null
+      if (result?.error) throw new Error(result.error)
+
+      // Show the generated key (only shown once!)
+      setNewlyGeneratedKey(result?.key || null)
+      setApiKeyVisible(true)
+      showSuccess('API key generated! Copy it now - it won\'t be shown again.')
+
+      // Refresh the list
+      await fetchApiKeys()
+
+      // Reset form
+      setNewKeyName('Default Key')
+      setNewKeyScopes(['read'])
+    } catch (error: any) {
+      console.error('Error generating API key:', error)
+      showError(error.message || 'Failed to generate API key')
+    } finally {
+      setApiKeyGenerating(false)
+    }
+  }
+
+  // Revoke an API key
+  const revokeApiKey = async (keyId: string) => {
+    if (!confirm('Are you sure you want to revoke this API key? It will stop working immediately.')) {
+      return
+    }
+
+    try {
+      const { data, error } = await supabase.rpc('revoke_api_key', {
+        p_key_id: keyId
+      } as any)
+
+      if (error) throw error
+      const result = data as { success?: boolean; error?: string } | null
+      if (result?.error) throw new Error(result.error)
+
+      showSuccess('API key revoked')
+      await fetchApiKeys()
+    } catch (error: any) {
+      console.error('Error revoking API key:', error)
+      showError(error.message || 'Failed to revoke API key')
     }
   }
 
   // Copy API key to clipboard
-  const copyApiKey = async () => {
-    if (apiKey) {
-      await navigator.clipboard.writeText(apiKey)
-      setApiKeyCopied(true)
-      setTimeout(() => setApiKeyCopied(false), 2000)
-    }
+  const copyApiKey = async (key: string) => {
+    await navigator.clipboard.writeText(key)
+    setApiKeyCopied(true)
+    setTimeout(() => setApiKeyCopied(false), 2000)
+    showSuccess('Copied to clipboard')
   }
 
   // Update workspace form when currentWorkspace changes
@@ -361,6 +419,15 @@ export function SettingsPage() {
   useEffect(() => {
     if (activeTab === 'Lead Scoring' && currentWorkspace) {
       fetchLeadScoringConfig()
+    }
+  }, [activeTab, currentWorkspace])
+
+  // Fetch API keys when tab changes to API
+  useEffect(() => {
+    if (activeTab === 'API' && currentWorkspace) {
+      fetchApiKeys()
+      // Clear newly generated key when leaving tab
+      return () => setNewlyGeneratedKey(null)
     }
   }, [activeTab, currentWorkspace])
 
@@ -2321,71 +2388,192 @@ export function SettingsPage() {
                   API Key Management
                 </h2>
                 <p className="text-sm text-slate-500 dark:text-slate-400">
-                  Generate and manage your API keys for external integrations
+                  Generate and manage your API keys for external integrations and AI agents
                 </p>
               </div>
 
-              <div className="card p-4">
-                <h3 className="font-medium text-slate-900 dark:text-white mb-4">Your API Key</h3>
-                {apiKey ? (
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-2">
-                      <div className="flex-1 p-3 bg-slate-50 dark:bg-slate-800 rounded-lg font-mono text-sm break-all">
-                        {apiKeyVisible ? apiKey : '•'.repeat(48)}
-                      </div>
-                      <button
-                        onClick={() => setApiKeyVisible(!apiKeyVisible)}
-                        className="btn-outline p-2"
-                        title={apiKeyVisible ? 'Hide key' : 'Show key'}
-                      >
-                        {apiKeyVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </button>
-                      <button
-                        onClick={copyApiKey}
-                        className="btn-outline p-2"
-                        title="Copy to clipboard"
-                      >
-                        {apiKeyCopied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
-                      </button>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <button
-                        onClick={rotateApiKey}
-                        className="btn-outline text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20"
-                        disabled={apiKeyGenerating}
-                      >
-                        <RefreshCw className={clsx('h-4 w-4 mr-2', apiKeyGenerating && 'animate-spin')} />
-                        Rotate Key
-                      </button>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">
-                        Rotating will invalidate your current key immediately
+              {/* Newly Generated Key Alert */}
+              {newlyGeneratedKey && (
+                <div className="card p-4 border-2 border-green-500 bg-green-50 dark:bg-green-900/20">
+                  <div className="flex items-start gap-3">
+                    <Check className="h-5 w-5 text-green-600 mt-0.5" />
+                    <div className="flex-1">
+                      <h3 className="font-medium text-green-800 dark:text-green-200 mb-2">
+                        API Key Generated Successfully!
+                      </h3>
+                      <p className="text-sm text-green-700 dark:text-green-300 mb-3">
+                        Copy this key now. For security reasons, it won't be shown again.
                       </p>
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 p-3 bg-white dark:bg-slate-800 rounded-lg font-mono text-sm break-all border">
+                          {apiKeyVisible ? newlyGeneratedKey : '•'.repeat(48)}
+                        </div>
+                        <button
+                          onClick={() => setApiKeyVisible(!apiKeyVisible)}
+                          className="btn-outline p-2"
+                          title={apiKeyVisible ? 'Hide key' : 'Show key'}
+                        >
+                          {apiKeyVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                        <button
+                          onClick={() => copyApiKey(newlyGeneratedKey)}
+                          className="btn-primary p-2"
+                          title="Copy to clipboard"
+                        >
+                          {apiKeyCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                        </button>
+                      </div>
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Generate New Key */}
+              <div className="card p-4">
+                <h3 className="font-medium text-slate-900 dark:text-white mb-4">Generate New API Key</h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                      Key Name
+                    </label>
+                    <input
+                      type="text"
+                      value={newKeyName}
+                      onChange={(e) => setNewKeyName(e.target.value)}
+                      placeholder="e.g., Claude Agent, Production App"
+                      className="input w-full max-w-md"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                      Permissions
+                    </label>
+                    <div className="flex flex-wrap gap-3">
+                      {(['read', 'write', 'admin'] as ApiKeyScope[]).map((scope) => (
+                        <label key={scope} className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={newKeyScopes.includes(scope)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setNewKeyScopes([...newKeyScopes, scope])
+                              } else {
+                                setNewKeyScopes(newKeyScopes.filter(s => s !== scope))
+                              }
+                            }}
+                            className="rounded border-slate-300 text-primary-600 focus:ring-primary-500"
+                          />
+                          <span className="text-sm text-slate-700 dark:text-slate-300 capitalize">{scope}</span>
+                          <span className="text-xs text-slate-500">
+                            {scope === 'read' && '(view data)'}
+                            {scope === 'write' && '(create/update)'}
+                            {scope === 'admin' && '(full access)'}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  <button
+                    onClick={generateApiKey}
+                    className="btn-primary"
+                    disabled={apiKeyGenerating || newKeyScopes.length === 0}
+                  >
+                    {apiKeyGenerating ? (
+                      <>
+                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <Key className="h-4 w-4 mr-2" />
+                        Generate API Key
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Existing Keys */}
+              <div className="card p-4">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-medium text-slate-900 dark:text-white">Your API Keys</h3>
+                  <button
+                    onClick={fetchApiKeys}
+                    className="btn-outline p-2"
+                    disabled={apiKeysLoading}
+                    title="Refresh"
+                  >
+                    <RefreshCw className={clsx('h-4 w-4', apiKeysLoading && 'animate-spin')} />
+                  </button>
+                </div>
+
+                {apiKeysLoading ? (
+                  <div className="text-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+                    <p className="text-slate-500 dark:text-slate-400 mt-2">Loading keys...</p>
+                  </div>
+                ) : apiKeys.length === 0 ? (
+                  <div className="text-center py-8 text-slate-500 dark:text-slate-400">
+                    <Key className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                    <p>No API keys yet</p>
+                    <p className="text-sm">Generate your first key to start using the API</p>
                   </div>
                 ) : (
-                  <div className="space-y-4">
-                    <p className="text-sm text-slate-500 dark:text-slate-400">
-                      You haven't generated an API key yet. Generate one to start using the API.
-                    </p>
-                    <button
-                      onClick={generateApiKey}
-                      className="btn-primary"
-                      disabled={apiKeyGenerating}
-                    >
-                      {apiKeyGenerating ? (
-                        <>
-                          <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                          Generating...
-                        </>
-                      ) : (
-                        <>
-                          <Key className="h-4 w-4 mr-2" />
-                          Generate API Key
-                        </>
-                      )}
-                    </button>
+                  <div className="space-y-3">
+                    {apiKeys.map((key) => (
+                      <div
+                        key={key.id}
+                        className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800 rounded-lg"
+                      >
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-slate-900 dark:text-white">{key.name}</span>
+                            <code className="text-xs bg-slate-200 dark:bg-slate-700 px-2 py-0.5 rounded">
+                              {key.key_prefix}
+                            </code>
+                          </div>
+                          <div className="flex items-center gap-3 mt-1 text-xs text-slate-500 dark:text-slate-400">
+                            <span>Scopes: {key.scopes.join(', ')}</span>
+                            <span>•</span>
+                            <span>Created: {new Date(key.created_at).toLocaleDateString()}</span>
+                            {key.last_used_at && (
+                              <>
+                                <span>•</span>
+                                <span>Last used: {new Date(key.last_used_at).toLocaleDateString()}</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => revokeApiKey(key.id)}
+                          className="btn-outline text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 p-2"
+                          title="Revoke key"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ))}
                   </div>
                 )}
+              </div>
+
+              {/* API Endpoint Documentation */}
+              <div className="card p-4">
+                <h3 className="font-medium text-slate-900 dark:text-white mb-4">API Endpoint</h3>
+                <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
+                  <code className="text-sm font-mono text-primary-600 dark:text-primary-400 break-all">
+                    https://dsztivupnrzaxvrijxpu.supabase.co/functions/v1/api-gateway
+                  </code>
+                </div>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mt-3">
+                  Include your API key in the <code className="bg-slate-200 dark:bg-slate-700 px-1 rounded">x-api-key</code> header.
+                </p>
+                <div className="mt-4 p-3 bg-slate-900 rounded-lg">
+                  <pre className="text-sm text-green-400 overflow-x-auto">
+{`curl https://dsztivupnrzaxvrijxpu.supabase.co/functions/v1/api-gateway/clients \\
+  -H "x-api-key: vl_your_key_here"`}
+                  </pre>
+                </div>
               </div>
 
               <div className="border-t border-slate-200 dark:border-slate-700 pt-6">

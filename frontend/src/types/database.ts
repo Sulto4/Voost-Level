@@ -447,6 +447,44 @@ export type Database = {
           updated_at?: string
         }
       }
+      api_keys: {
+        Row: {
+          id: string
+          user_id: string
+          workspace_id: string
+          key_hash: string
+          key_prefix: string
+          name: string
+          scopes: string[]
+          last_used_at: string | null
+          created_at: string
+          revoked_at: string | null
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          workspace_id: string
+          key_hash: string
+          key_prefix: string
+          name?: string
+          scopes?: string[]
+          last_used_at?: string | null
+          created_at?: string
+          revoked_at?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          workspace_id?: string
+          key_hash?: string
+          key_prefix?: string
+          name?: string
+          scopes?: string[]
+          last_used_at?: string | null
+          created_at?: string
+          revoked_at?: string | null
+        }
+      }
     }
     Views: {
       [_ in never]: never
@@ -524,4 +562,19 @@ export interface LeadScoringRule {
 export interface LeadScoringConfig {
   enabled: boolean
   rules: LeadScoringRule[]
+}
+
+// API Key types
+export type ApiKeyScope = 'read' | 'write' | 'admin'
+
+export interface ApiKey {
+  id: string
+  user_id: string
+  workspace_id: string
+  key_prefix: string
+  name: string
+  scopes: ApiKeyScope[]
+  last_used_at: string | null
+  created_at: string
+  revoked_at: string | null
 }
