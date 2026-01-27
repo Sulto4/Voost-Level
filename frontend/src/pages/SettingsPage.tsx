@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { User, Building2, Palette, Bell, Shield, Webhook, Plus, Trash2, Check, X, AlertTriangle, UserCog, ClipboardList, Phone, Mail, Calendar, FileText, RefreshCw, Upload, Camera, Sparkles, HelpCircle, ChevronDown, ChevronUp } from 'lucide-react'
+import { User, Building2, Palette, Bell, Shield, Webhook, Plus, Trash2, Check, X, AlertTriangle, UserCog, ClipboardList, Phone, Mail, Calendar, FileText, RefreshCw, Upload, Camera, Sparkles, HelpCircle, ChevronDown, ChevronUp, Smartphone } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
@@ -8,6 +8,7 @@ import { useWorkspace } from '../context/WorkspaceContext'
 import { useToast } from '../context/ToastContext'
 import { supabase } from '../lib/supabase'
 import type { Webhook as WebhookType, WorkspaceMember, Activity } from '../types/database'
+import { PWAInstallSection } from '../components/pwa/PWAInstallBanner'
 
 const tabs = [
   { name: 'Profile', icon: User },
@@ -1136,6 +1137,18 @@ export function SettingsPage() {
                     <span className="text-sm font-medium">Dark</span>
                   </button>
                 </div>
+              </div>
+
+              <hr className="border-slate-200 dark:border-slate-700" />
+
+              <div>
+                <div className="flex items-center gap-2 mb-4">
+                  <Smartphone className="h-5 w-5 text-slate-600 dark:text-slate-400" />
+                  <h3 className="text-md font-semibold text-slate-900 dark:text-white">
+                    Install App
+                  </h3>
+                </div>
+                <PWAInstallSection />
               </div>
             </div>
           )}

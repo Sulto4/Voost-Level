@@ -3,9 +3,11 @@ import { AuthProvider } from './context/AuthContext'
 import { ThemeProvider } from './context/ThemeContext'
 import { WorkspaceProvider } from './context/WorkspaceContext'
 import { ToastProvider } from './context/ToastContext'
+import { PWAProvider } from './context/PWAContext'
 import { ToastContainer } from './components/ui/Toast'
 import { CommandPalette, useCommandPalette } from './components/ui/CommandPalette'
 import { InactivityWarning } from './components/ui/InactivityWarning'
+import { PWAInstallBanner } from './components/pwa/PWAInstallBanner'
 import { ProtectedRoute } from './components/auth/ProtectedRoute'
 import { Layout } from './components/layout/Layout'
 import { LoginPage } from './pages/auth/LoginPage'
@@ -75,6 +77,7 @@ function AppContent() {
       <ToastContainer />
       <CommandPalette isOpen={commandPalette.isOpen} onClose={commandPalette.close} />
       <InactivityWarning />
+      <PWAInstallBanner />
     </>
   )
 }
@@ -82,13 +85,15 @@ function AppContent() {
 function App() {
   return (
     <ThemeProvider>
-      <AuthProvider>
-        <WorkspaceProvider>
-          <ToastProvider>
-            <AppContent />
-          </ToastProvider>
-        </WorkspaceProvider>
-      </AuthProvider>
+      <PWAProvider>
+        <AuthProvider>
+          <WorkspaceProvider>
+            <ToastProvider>
+              <AppContent />
+            </ToastProvider>
+          </WorkspaceProvider>
+        </AuthProvider>
+      </PWAProvider>
     </ThemeProvider>
   )
 }
