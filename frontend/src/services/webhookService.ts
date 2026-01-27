@@ -45,7 +45,14 @@ export interface WebhookDelivery {
   response?: string
   error?: string
   timestamp: string
+  retryCount?: number
+  maxRetries?: number
 }
+
+// Retry configuration
+const MAX_RETRIES = 3
+const INITIAL_RETRY_DELAY_MS = 1000 // 1 second
+const MAX_RETRY_DELAY_MS = 10000 // 10 seconds
 
 // Store recent webhook deliveries for debugging/viewing
 const recentDeliveries: WebhookDelivery[] = []
@@ -95,7 +102,25 @@ export async function triggerWebhooks(
 }
 
 /**
- * Fire a single webhook
+ * Sleep for a specified number of milliseconds
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+/**
+ * Calculate exponential backoff delay with jitter
+ */
+function calculateRetryDelay(attempt: number): number {
+  const exponentialDelay = INITIAL_RETRY_DELAY_MS * Math.pow(2, attempt)
+  const cappedDelay = Math.min(exponentialDelay, MAX_RETRY_DELAY_MS)
+  // Add jitter (±25%)
+  const jitter = cappedDelay * 0.25 * (Math.random() * 2 - 1)
+  return Math.round(cappedDelay + jitter)
+}
+
+/**
+ * Fire a single webhook with retry logic
  */
 async function fireWebhook(
   webhook: Webhook,
@@ -110,46 +135,76 @@ async function fireWebhook(
     payload,
     status: 'pending',
     timestamp: new Date().toISOString(),
+    retryCount: 0,
+    maxRetries: MAX_RETRIES,
   }
 
-  try {
-    // Prepare headers
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      'X-Webhook-Event': event,
-      'X-Webhook-Timestamp': payload.timestamp,
-    }
+  // Prepare headers
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'X-Webhook-Event': event,
+    'X-Webhook-Timestamp': payload.timestamp,
+  }
 
-    // Add signature if secret is configured
-    if (webhook.secret) {
-      const signature = await generateSignature(JSON.stringify(payload), webhook.secret)
-      headers['X-Webhook-Signature'] = signature
-    }
+  // Add signature if secret is configured
+  if (webhook.secret) {
+    const signature = await generateSignature(JSON.stringify(payload), webhook.secret)
+    headers['X-Webhook-Signature'] = signature
+  }
 
-    // Make the webhook request
-    const response = await fetch(webhook.url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(payload),
-      // Short timeout to avoid blocking
-      signal: AbortSignal.timeout(10000),
-    })
-
-    delivery.statusCode = response.status
-    delivery.status = response.ok ? 'success' : 'failed'
+  // Attempt to fire webhook with retries
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    delivery.retryCount = attempt
 
     try {
-      delivery.response = await response.text()
-    } catch {
-      delivery.response = 'Unable to read response body'
+      // Make the webhook request
+      const response = await fetch(webhook.url, {
+        method: 'POST',
+        headers: {
+          ...headers,
+          'X-Webhook-Retry-Count': String(attempt),
+        },
+        body: JSON.stringify(payload),
+        // Short timeout to avoid blocking
+        signal: AbortSignal.timeout(10000),
+      })
+
+      delivery.statusCode = response.status
+      delivery.status = response.ok ? 'success' : 'failed'
+
+      try {
+        delivery.response = await response.text()
+      } catch {
+        delivery.response = 'Unable to read response body'
+      }
+
+      // If successful, break out of retry loop
+      if (response.ok) {
+        console.log(`[Webhook] SUCCESS: ${event} -> ${webhook.url}${attempt > 0 ? ` (after ${attempt} retries)` : ''}`, delivery)
+        return delivery
+      }
+
+      // Log retry attempt for non-success status codes
+      if (attempt < MAX_RETRIES) {
+        const delay = calculateRetryDelay(attempt)
+        console.log(`[Webhook] RETRY ${attempt + 1}/${MAX_RETRIES}: ${event} -> ${webhook.url} (status ${response.status}, waiting ${delay}ms)`)
+        await sleep(delay)
+      }
+    } catch (err) {
+      delivery.status = 'failed'
+      delivery.error = err instanceof Error ? err.message : 'Unknown error'
+
+      // Log retry attempt for network errors
+      if (attempt < MAX_RETRIES) {
+        const delay = calculateRetryDelay(attempt)
+        console.log(`[Webhook] RETRY ${attempt + 1}/${MAX_RETRIES}: ${event} -> ${webhook.url} (error: ${delivery.error}, waiting ${delay}ms)`)
+        await sleep(delay)
+      }
     }
-  } catch (err) {
-    delivery.status = 'failed'
-    delivery.error = err instanceof Error ? err.message : 'Unknown error'
   }
 
-  // Log the delivery for debugging
-  console.log(`[Webhook] ${delivery.status.toUpperCase()}: ${event} -> ${webhook.url}`, delivery)
+  // Log final failure after all retries exhausted
+  console.log(`[Webhook] FAILED: ${event} -> ${webhook.url} (after ${MAX_RETRIES} retries)`, delivery)
 
   return delivery
 }
