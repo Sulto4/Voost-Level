@@ -15,7 +15,7 @@ interface OverdueTask extends Task {
 
 interface Notification {
   id: string
-  type: 'overdue_task' | 'info'
+  type: 'overdue_task' | 'due_soon' | 'info'
   title: string
   subtitle?: string
   timestamp: Date
@@ -165,11 +165,20 @@ export function Header({ onMenuClick }: HeaderProps) {
     const projectIds = projects.map(p => p.id)
     const projectMap = new Map(projects.map(p => [p.id, { name: p.name, client_name: (p.clients as any)?.name }]))
 
-    // Get overdue tasks (due_date is before today and status is not 'done')
+    // Get overdue and upcoming tasks
     const today = new Date()
     today.setHours(0, 0, 0, 0)
     const todayStr = today.toISOString().split('T')[0]
 
+    const tomorrow = new Date(today)
+    tomorrow.setDate(tomorrow.getDate() + 1)
+    const tomorrowStr = tomorrow.toISOString().split('T')[0]
+
+    const dayAfterTomorrow = new Date(today)
+    dayAfterTomorrow.setDate(dayAfterTomorrow.getDate() + 2)
+    const dayAfterTomorrowStr = dayAfterTomorrow.toISOString().split('T')[0]
+
+    // Get overdue tasks (due_date is before today and status is not 'done')
     const { data: overdueTasks } = await supabase
       .from('tasks')
       .select('*')
@@ -179,26 +188,59 @@ export function Header({ onMenuClick }: HeaderProps) {
       .order('due_date', { ascending: true })
       .limit(10)
 
+    // Get tasks due today or tomorrow (reminders)
+    const { data: upcomingTasks } = await supabase
+      .from('tasks')
+      .select('*')
+      .in('project_id', projectIds)
+      .gte('due_date', todayStr)
+      .lt('due_date', dayAfterTomorrowStr)
+      .neq('status', 'done')
+      .order('due_date', { ascending: true })
+      .limit(10)
+
+    const newNotifications: Notification[] = []
+
+    // Add overdue task notifications
     if (overdueTasks && overdueTasks.length > 0) {
-      const newNotifications: Notification[] = overdueTasks.map(task => {
+      overdueTasks.forEach(task => {
         const projectInfo = projectMap.get(task.project_id)
         const dueDate = new Date(task.due_date!)
         const daysOverdue = Math.floor((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24))
 
-        return {
-          id: `task-${task.id}`,
+        newNotifications.push({
+          id: `overdue-${task.id}`,
           type: 'overdue_task' as const,
           title: `Task "${task.title}" is overdue`,
           subtitle: `${daysOverdue} day${daysOverdue !== 1 ? 's' : ''} overdue • ${projectInfo?.name || 'Unknown Project'}`,
           timestamp: dueDate,
           read: false,
           link: `/projects/${task.project_id}`,
-        }
+        })
       })
-      setNotifications(newNotifications)
-    } else {
-      setNotifications([])
     }
+
+    // Add upcoming task reminders (due today or tomorrow)
+    if (upcomingTasks && upcomingTasks.length > 0) {
+      upcomingTasks.forEach(task => {
+        const projectInfo = projectMap.get(task.project_id)
+        const dueDate = new Date(task.due_date!)
+        const isDueToday = task.due_date === todayStr
+        const dueDateLabel = isDueToday ? 'Due today' : 'Due tomorrow'
+
+        newNotifications.push({
+          id: `upcoming-${task.id}`,
+          type: 'due_soon' as const,
+          title: `${dueDateLabel}: "${task.title}"`,
+          subtitle: `${projectInfo?.name || 'Unknown Project'}`,
+          timestamp: dueDate,
+          read: false,
+          link: `/projects/${task.project_id}`,
+        })
+      })
+    }
+
+    setNotifications(newNotifications)
 
     setNotificationsLoading(false)
   }
@@ -493,8 +535,16 @@ export function Header({ onMenuClick }: HeaderProps) {
                               !isRead ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''
                             }`}
                           >
-                            <div className="p-2 rounded-lg bg-red-100 dark:bg-red-900/30 flex-shrink-0 relative">
-                              <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400" />
+                            <div className={`p-2 rounded-lg flex-shrink-0 relative ${
+                              notification.type === 'overdue_task'
+                                ? 'bg-red-100 dark:bg-red-900/30'
+                                : 'bg-amber-100 dark:bg-amber-900/30'
+                            }`}>
+                              {notification.type === 'overdue_task' ? (
+                                <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400" />
+                              ) : (
+                                <Clock className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                              )}
                               {!isRead && (
                                 <span className="absolute -top-0.5 -right-0.5 h-2 w-2 bg-blue-500 rounded-full" />
                               )}
