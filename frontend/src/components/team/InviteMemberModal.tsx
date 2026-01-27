@@ -2,7 +2,9 @@ import { useState } from 'react'
 import { Copy, Check } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { useWorkspace } from '../../context/WorkspaceContext'
+import { useAuth } from '../../context/AuthContext'
 import { LoadingSpinner } from '../ui/LoadingSpinner'
+import { notifyWorkspaceInvite } from '../../services/emailNotificationService'
 import type { WorkspaceRole } from '../../types/database'
 
 interface InviteMemberModalProps {
@@ -19,7 +21,8 @@ export function InviteMemberModal({ isOpen, onClose, onInviteSent }: InviteMembe
   const [success, setSuccess] = useState(false)
   const [inviteLink, setInviteLink] = useState('')
   const [copied, setCopied] = useState(false)
-  const { inviteMember, pendingInvitations } = useWorkspace()
+  const { inviteMember, pendingInvitations, currentWorkspace } = useWorkspace()
+  const { profile } = useAuth()
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -45,6 +48,13 @@ export function InviteMemberModal({ isOpen, onClose, onInviteSent }: InviteMembe
       setError(error.message || 'Failed to send invitation')
       setLoading(false)
     } else {
+      // Send email notification for workspace invite
+      if (currentWorkspace) {
+        const inviterName = profile?.full_name || profile?.email || 'Someone'
+        const roleName = role === 'admin' ? 'Admin' : role === 'member' ? 'Member' : 'Viewer'
+        notifyWorkspaceInvite(email.trim(), currentWorkspace.name, inviterName, roleName)
+      }
+
       setSuccess(true)
       setLoading(false)
       onInviteSent?.()

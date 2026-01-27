@@ -9,6 +9,7 @@ import { useToast } from '../context/ToastContext'
 import { supabase } from '../lib/supabase'
 import api, { RateLimitHeaders } from '../lib/api'
 import { getRecentDeliveries, clearRecentDeliveries, WebhookDelivery } from '../services/webhookService'
+import { getNotificationPreferences, saveNotificationPreferences, type NotificationPreferences } from '../services/emailNotificationService'
 import type { Webhook as WebhookType, WorkspaceMember, Activity, CustomFieldDefinition, CustomFieldType, WorkspaceCustomFields, LeadScoringRule, LeadScoringConfig, LeadScoringCriteriaType } from '../types/database'
 import { PWAInstallSection } from '../components/pwa/PWAInstallBanner'
 
@@ -271,6 +272,18 @@ export function SettingsPage() {
   const [apiKeyVisible, setApiKeyVisible] = useState(false)
   const [apiKeyGenerating, setApiKeyGenerating] = useState(false)
   const [apiKeyCopied, setApiKeyCopied] = useState(false)
+
+  // Notification preferences state
+  const [notificationPrefs, setNotificationPrefs] = useState<NotificationPreferences>(() => {
+    return getNotificationPreferences()
+  })
+
+  // Update notification preference
+  const updateNotificationPref = (key: keyof NotificationPreferences, value: boolean) => {
+    const updated = saveNotificationPreferences({ [key]: value })
+    setNotificationPrefs(updated)
+    showSuccess(`Notification preference updated`)
+  }
 
   // Generate a new API key
   const generateApiKey = () => {
@@ -1898,21 +1911,97 @@ export function SettingsPage() {
                 Notification Preferences
               </h2>
 
-              <div className="space-y-4">
-                <label className="flex items-center justify-between">
-                  <div>
-                    <span className="text-slate-900 dark:text-white font-medium">Email Notifications</span>
-                    <p className="text-sm text-slate-500">Receive email updates about your account</p>
+              {/* Global toggles */}
+              <div className="card p-4">
+                <h3 className="font-medium text-slate-900 dark:text-white mb-4">Global Settings</h3>
+                <div className="space-y-4">
+                  <label className="flex items-center justify-between cursor-pointer">
+                    <div>
+                      <span className="text-slate-900 dark:text-white font-medium">Email Notifications</span>
+                      <p className="text-sm text-slate-500">Receive email updates about important events</p>
+                    </div>
+                    <input
+                      type="checkbox"
+                      className="h-5 w-5 rounded text-primary-600 cursor-pointer"
+                      checked={notificationPrefs.emailNotificationsEnabled}
+                      onChange={(e) => updateNotificationPref('emailNotificationsEnabled', e.target.checked)}
+                    />
+                  </label>
+                  <label className="flex items-center justify-between cursor-pointer">
+                    <div>
+                      <span className="text-slate-900 dark:text-white font-medium">In-App Notifications</span>
+                      <p className="text-sm text-slate-500">Show notifications within the application</p>
+                    </div>
+                    <input
+                      type="checkbox"
+                      className="h-5 w-5 rounded text-primary-600 cursor-pointer"
+                      checked={notificationPrefs.inAppNotificationsEnabled}
+                      onChange={(e) => updateNotificationPref('inAppNotificationsEnabled', e.target.checked)}
+                    />
+                  </label>
+                </div>
+              </div>
+
+              {/* Email notification types */}
+              {notificationPrefs.emailNotificationsEnabled && (
+                <div className="card p-4">
+                  <h3 className="font-medium text-slate-900 dark:text-white mb-4">Email Notification Types</h3>
+                  <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
+                    Choose which events trigger email notifications
+                  </p>
+                  <div className="space-y-4">
+                    <label className="flex items-center justify-between cursor-pointer">
+                      <div>
+                        <span className="text-slate-900 dark:text-white font-medium">Project Updates</span>
+                        <p className="text-sm text-slate-500">When you're added to or removed from a project</p>
+                      </div>
+                      <input
+                        type="checkbox"
+                        className="h-5 w-5 rounded text-primary-600 cursor-pointer"
+                        checked={notificationPrefs.notifyOnProjectAdded}
+                        onChange={(e) => updateNotificationPref('notifyOnProjectAdded', e.target.checked)}
+                      />
+                    </label>
+                    <label className="flex items-center justify-between cursor-pointer">
+                      <div>
+                        <span className="text-slate-900 dark:text-white font-medium">Task Assignments</span>
+                        <p className="text-sm text-slate-500">When a task is assigned to you</p>
+                      </div>
+                      <input
+                        type="checkbox"
+                        className="h-5 w-5 rounded text-primary-600 cursor-pointer"
+                        checked={notificationPrefs.notifyOnTaskAssigned}
+                        onChange={(e) => updateNotificationPref('notifyOnTaskAssigned', e.target.checked)}
+                      />
+                    </label>
+                    <label className="flex items-center justify-between cursor-pointer">
+                      <div>
+                        <span className="text-slate-900 dark:text-white font-medium">Workspace Invitations</span>
+                        <p className="text-sm text-slate-500">When you're invited to join a workspace</p>
+                      </div>
+                      <input
+                        type="checkbox"
+                        className="h-5 w-5 rounded text-primary-600 cursor-pointer"
+                        checked={notificationPrefs.notifyOnWorkspaceInvite}
+                        onChange={(e) => updateNotificationPref('notifyOnWorkspaceInvite', e.target.checked)}
+                      />
+                    </label>
                   </div>
-                  <input type="checkbox" className="h-5 w-5 rounded text-primary-600" defaultChecked />
-                </label>
-                <label className="flex items-center justify-between">
+                </div>
+              )}
+
+              {/* Development mode notice */}
+              <div className="card p-4 bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800">
+                <div className="flex items-start gap-3">
+                  <Bell className="h-5 w-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
                   <div>
-                    <span className="text-slate-900 dark:text-white font-medium">In-App Notifications</span>
-                    <p className="text-sm text-slate-500">Show notifications within the application</p>
+                    <h4 className="font-medium text-amber-800 dark:text-amber-200">Development Mode</h4>
+                    <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+                      Email notifications are logged to the browser console instead of being sent to actual email addresses.
+                      Open Developer Tools (F12) and check the Console tab to see email notifications when events occur.
+                    </p>
                   </div>
-                  <input type="checkbox" className="h-5 w-5 rounded text-primary-600" defaultChecked />
-                </label>
+                </div>
               </div>
             </div>
           )}

@@ -3,6 +3,8 @@ import { Modal } from '../ui/Modal'
 import { LoadingSpinner } from '../ui/LoadingSpinner'
 import { supabase } from '../../lib/supabase'
 import { useWorkspace } from '../../context/WorkspaceContext'
+import { useAuth } from '../../context/AuthContext'
+import { notifyTaskAssigned } from '../../services/emailNotificationService'
 import type { Task, TaskStatus, TaskPriority, Profile } from '../../types/database'
 
 interface EditTaskModalProps {
@@ -14,6 +16,7 @@ interface EditTaskModalProps {
 
 export function EditTaskModal({ isOpen, onClose, task, onTaskUpdated }: EditTaskModalProps) {
   const { currentWorkspace } = useWorkspace()
+  const { profile } = useAuth()
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [status, setStatus] = useState<TaskStatus>('todo')
@@ -100,6 +103,30 @@ export function EditTaskModal({ isOpen, onClose, task, onTaskUpdated }: EditTask
       setError(updateError.message || 'Failed to update task')
       setLoading(false)
     } else {
+      // Send email notification if assignee changed
+      const assigneeChanged = assignedTo && assignedTo !== task.assigned_to
+      if (assigneeChanged) {
+        // Get the project name and assignee email for the notification
+        try {
+          const [projectResult, assigneeResult] = await Promise.all([
+            supabase.from('projects').select('name').eq('id', task.project_id).single(),
+            supabase.from('profiles').select('email, full_name').eq('id', assignedTo).single(),
+          ])
+
+          if (assigneeResult.data?.email && projectResult.data?.name) {
+            const assignerName = profile?.full_name || profile?.email || 'Someone'
+            notifyTaskAssigned(
+              assigneeResult.data.email,
+              title.trim(),
+              projectResult.data.name,
+              assignerName
+            )
+          }
+        } catch (notifyError) {
+          console.error('[EditTaskModal] Error sending task assignment notification:', notifyError)
+        }
+      }
+
       setSuccess(true)
       setLoading(false)
       onTaskUpdated?.()

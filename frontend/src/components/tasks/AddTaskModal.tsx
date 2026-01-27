@@ -3,6 +3,8 @@ import { Modal } from '../ui/Modal'
 import { LoadingSpinner } from '../ui/LoadingSpinner'
 import { supabase } from '../../lib/supabase'
 import { useWorkspace } from '../../context/WorkspaceContext'
+import { useAuth } from '../../context/AuthContext'
+import { notifyTaskAssigned } from '../../services/emailNotificationService'
 import type { TaskStatus, TaskPriority, Project, Profile } from '../../types/database'
 
 interface AddTaskModalProps {
@@ -14,6 +16,7 @@ interface AddTaskModalProps {
 
 export function AddTaskModal({ isOpen, onClose, project, onTaskAdded }: AddTaskModalProps) {
   const { currentWorkspace } = useWorkspace()
+  const { profile } = useAuth()
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [status, setStatus] = useState<TaskStatus>('todo')
@@ -87,6 +90,24 @@ export function AddTaskModal({ isOpen, onClose, project, onTaskAdded }: AddTaskM
       setError(insertError.message || 'Failed to create task')
       setLoading(false)
     } else {
+      // Send email notification if task is assigned to someone
+      if (assignedTo && project) {
+        try {
+          const assigneeProfile = teamMembers.find(m => m.id === assignedTo)
+          if (assigneeProfile?.email) {
+            const assignerName = profile?.full_name || profile?.email || 'Someone'
+            notifyTaskAssigned(
+              assigneeProfile.email,
+              title.trim(),
+              project.name,
+              assignerName
+            )
+          }
+        } catch (notifyError) {
+          console.error('[AddTaskModal] Error sending task assignment notification:', notifyError)
+        }
+      }
+
       setSuccess(true)
       setLoading(false)
       onTaskAdded?.()
