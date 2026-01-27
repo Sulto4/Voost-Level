@@ -50,17 +50,31 @@ export function Header({ onMenuClick }: HeaderProps) {
   const [notificationsLoading, setNotificationsLoading] = useState(false)
   const notificationsRef = useRef<HTMLDivElement>(null)
   const [readNotificationIds, setReadNotificationIds] = useState<Set<string>>(new Set())
+  const [dismissedNotificationIds, setDismissedNotificationIds] = useState<Set<string>>(new Set())
 
-  // Load read notifications from localStorage
+  // Load read and dismissed notifications from localStorage
   useEffect(() => {
-    const stored = localStorage.getItem('readNotifications')
-    if (stored) {
+    const storedRead = localStorage.getItem('readNotifications')
+    if (storedRead) {
       try {
-        const parsed = JSON.parse(stored)
+        const parsed = JSON.parse(storedRead)
         setReadNotificationIds(new Set(parsed))
       } catch (e) {
-        // Invalid JSON, reset
         localStorage.removeItem('readNotifications')
+      }
+    }
+
+    const storedDismissed = localStorage.getItem('dismissedNotifications')
+    if (storedDismissed) {
+      try {
+        const parsed = JSON.parse(storedDismissed)
+        // Only keep dismissals from the last 24 hours
+        const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000
+        const validDismissals = parsed.filter((d: { id: string; time: number }) => d.time > oneDayAgo)
+        setDismissedNotificationIds(new Set(validDismissals.map((d: { id: string }) => d.id)))
+        localStorage.setItem('dismissedNotifications', JSON.stringify(validDismissals))
+      } catch (e) {
+        localStorage.removeItem('dismissedNotifications')
       }
     }
   }, [])
@@ -82,8 +96,39 @@ export function Header({ onMenuClick }: HeaderProps) {
     localStorage.setItem('readNotifications', JSON.stringify(allIds))
   }
 
-  // Get unread count
-  const unreadCount = notifications.filter(n => !readNotificationIds.has(n.id)).length
+  // Dismiss a single notification (hide for 24 hours)
+  const dismissNotification = (notificationId: string) => {
+    setDismissedNotificationIds(prev => {
+      const newSet = new Set(prev)
+      newSet.add(notificationId)
+      const storedDismissed = localStorage.getItem('dismissedNotifications')
+      let dismissals: { id: string; time: number }[] = []
+      if (storedDismissed) {
+        try {
+          dismissals = JSON.parse(storedDismissed)
+        } catch (e) {
+          // ignore
+        }
+      }
+      dismissals.push({ id: notificationId, time: Date.now() })
+      localStorage.setItem('dismissedNotifications', JSON.stringify(dismissals))
+      return newSet
+    })
+  }
+
+  // Clear all notifications (dismiss all for 24 hours)
+  const clearAllNotifications = () => {
+    const allIds = notifications.map(n => n.id)
+    setDismissedNotificationIds(new Set(allIds))
+    const dismissals = allIds.map(id => ({ id, time: Date.now() }))
+    localStorage.setItem('dismissedNotifications', JSON.stringify(dismissals))
+  }
+
+  // Filter out dismissed notifications
+  const visibleNotifications = notifications.filter(n => !dismissedNotificationIds.has(n.id))
+
+  // Get unread count (only from visible notifications)
+  const unreadCount = visibleNotifications.filter(n => !readNotificationIds.has(n.id)).length
 
   // Fetch overdue tasks for notifications
   const fetchOverdueTasks = async () => {
@@ -424,15 +469,15 @@ export function Header({ onMenuClick }: HeaderProps) {
                       <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600 mx-auto mb-2"></div>
                       <p className="text-sm">Loading notifications...</p>
                     </div>
-                  ) : notifications.length === 0 ? (
+                  ) : visibleNotifications.length === 0 ? (
                     <div className="py-8 text-center text-slate-500 dark:text-slate-400">
                       <CheckCircle className="h-8 w-8 mx-auto mb-2 text-green-500 opacity-70" />
-                      <p className="text-sm">No overdue tasks</p>
+                      <p className="text-sm">No notifications</p>
                       <p className="text-xs mt-1">You're all caught up!</p>
                     </div>
                   ) : (
                     <div className="py-1">
-                      {notifications.map((notification) => {
+                      {visibleNotifications.map((notification) => {
                         const isRead = readNotificationIds.has(notification.id)
                         return (
                           <button
@@ -469,16 +514,22 @@ export function Header({ onMenuClick }: HeaderProps) {
                     </div>
                   )}
                 </div>
-                {notifications.length > 0 && (
-                  <div className="px-4 py-2 border-t border-slate-200 dark:border-slate-700">
+                {visibleNotifications.length > 0 && (
+                  <div className="px-4 py-2 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">
                     <button
                       onClick={() => {
                         navigate('/projects')
                         setShowNotifications(false)
                       }}
-                      className="text-sm text-primary-600 dark:text-primary-400 hover:underline w-full text-center"
+                      className="text-sm text-primary-600 dark:text-primary-400 hover:underline"
                     >
                       View all projects
+                    </button>
+                    <button
+                      onClick={clearAllNotifications}
+                      className="text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
+                    >
+                      Clear all
                     </button>
                   </div>
                 )}
