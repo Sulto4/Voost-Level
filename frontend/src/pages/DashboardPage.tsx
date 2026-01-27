@@ -213,6 +213,17 @@ export function DashboardPage() {
     await fetchPinnedClients()
   }, [currentWorkspace, dateRange, pinnedClientIds])
 
+  // Listen for reconnection event and sync data
+  useEffect(() => {
+    function handleReconnect() {
+      console.log('[DashboardPage] Syncing data after reconnection...')
+      handleRefresh()
+    }
+
+    window.addEventListener('app:reconnected', handleReconnect)
+    return () => window.removeEventListener('app:reconnected', handleReconnect)
+  }, [handleRefresh])
+
   // Toggle widget visibility
   function toggleWidget(widgetId: WidgetId) {
     const updated = widgets.map(w =>

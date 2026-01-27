@@ -33,9 +33,13 @@ export function Layout() {
   useEffect(() => {
     function handleOnline() {
       setIsOffline(false)
+      // Dispatch custom event so pages can sync data
+      window.dispatchEvent(new CustomEvent('app:reconnected'))
+      console.log('[Sync] Connection restored - triggering data sync')
     }
     function handleOffline() {
       setIsOffline(true)
+      console.log('[Sync] Connection lost - offline mode active')
     }
 
     window.addEventListener('online', handleOnline)

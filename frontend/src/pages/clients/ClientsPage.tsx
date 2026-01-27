@@ -828,6 +828,17 @@ export function ClientsPage() {
     await fetchAvailableSources()
   }, [currentWorkspace, currentPage, statusFilter, dateFilter, sourceFilter, sortField, sortDirection, showDeletedClients])
 
+  // Listen for reconnection event and sync data
+  useEffect(() => {
+    function handleReconnect() {
+      console.log('[ClientsPage] Syncing data after reconnection...')
+      handleRefresh()
+    }
+
+    window.addEventListener('app:reconnected', handleReconnect)
+    return () => window.removeEventListener('app:reconnected', handleReconnect)
+  }, [handleRefresh])
+
   // Export filtered clients to JSON
   async function exportToJSON() {
     const exportData = await fetchExportData()
