@@ -8,6 +8,7 @@ import { useWorkspace } from '../context/WorkspaceContext'
 import { useToast } from '../context/ToastContext'
 import { supabase } from '../lib/supabase'
 import api, { RateLimitHeaders } from '../lib/api'
+import { getRecentDeliveries, clearRecentDeliveries, WebhookDelivery } from '../services/webhookService'
 import type { Webhook as WebhookType, WorkspaceMember, Activity, CustomFieldDefinition, CustomFieldType, WorkspaceCustomFields, LeadScoringRule, LeadScoringConfig, LeadScoringCriteriaType } from '../types/database'
 import { PWAInstallSection } from '../components/pwa/PWAInstallBanner'
 
@@ -209,6 +210,7 @@ export function SettingsPage() {
   const [newWebhookSecret, setNewWebhookSecret] = useState('')
   const [newWebhookEvents, setNewWebhookEvents] = useState<string[]>([])
   const [webhookSaving, setWebhookSaving] = useState(false)
+  const [webhookDeliveries, setWebhookDeliveries] = useState<WebhookDelivery[]>([])
 
   // Danger zone state
   const [showDeleteModal, setShowDeleteModal] = useState(false)
@@ -276,6 +278,18 @@ export function SettingsPage() {
       fetchWebhooks()
     }
   }, [currentWorkspace])
+
+  // Refresh webhook deliveries when Integrations tab is active
+  useEffect(() => {
+    if (activeTab === 'Integrations') {
+      setWebhookDeliveries(getRecentDeliveries())
+      // Refresh every 5 seconds while on tab
+      const interval = setInterval(() => {
+        setWebhookDeliveries(getRecentDeliveries())
+      }, 5000)
+      return () => clearInterval(interval)
+    }
+  }, [activeTab])
 
   // Fetch audit logs when tab changes to Audit Log
   useEffect(() => {
@@ -2042,6 +2056,104 @@ export function SettingsPage() {
                   ))}
                 </div>
               )}
+
+              {/* Webhook Delivery Log */}
+              <div className="mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="font-medium text-slate-900 dark:text-white">
+                      Recent Webhook Deliveries
+                    </h3>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">
+                      View recent webhook activity and delivery status
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setWebhookDeliveries(getRecentDeliveries())}
+                      className="btn-outline text-sm py-1.5 px-3"
+                    >
+                      <RefreshCw className="h-4 w-4 mr-1" />
+                      Refresh
+                    </button>
+                    {webhookDeliveries.length > 0 && (
+                      <button
+                        onClick={() => {
+                          clearRecentDeliveries()
+                          setWebhookDeliveries([])
+                        }}
+                        className="btn-outline text-sm py-1.5 px-3 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                      >
+                        Clear Log
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {webhookDeliveries.length === 0 ? (
+                  <div className="text-center py-8 text-slate-500 dark:text-slate-400 border border-dashed border-slate-300 dark:border-slate-600 rounded-lg">
+                    <ClipboardList className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                    <p className="text-sm">No webhook deliveries yet</p>
+                    <p className="text-xs mt-1">Deliveries will appear here when webhooks are triggered</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2 max-h-96 overflow-y-auto">
+                    {webhookDeliveries.map((delivery, index) => (
+                      <div
+                        key={`${delivery.webhookId}-${delivery.timestamp}-${index}`}
+                        className={clsx(
+                          'p-3 rounded-lg border',
+                          delivery.status === 'success'
+                            ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+                            : delivery.status === 'failed'
+                            ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+                            : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700'
+                        )}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className={clsx(
+                                'px-2 py-0.5 text-xs rounded-full font-medium',
+                                delivery.status === 'success'
+                                  ? 'bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-200'
+                                  : delivery.status === 'failed'
+                                  ? 'bg-red-100 text-red-800 dark:bg-red-800 dark:text-red-200'
+                                  : 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300'
+                              )}>
+                                {delivery.status.toUpperCase()}
+                              </span>
+                              <span className="font-medium text-slate-900 dark:text-white">
+                                {delivery.webhookName}
+                              </span>
+                              <span className="px-1.5 py-0.5 text-xs rounded bg-primary-100 text-primary-800 dark:bg-primary-900/30 dark:text-primary-300">
+                                {delivery.event}
+                              </span>
+                            </div>
+                            <p className="text-sm text-slate-500 dark:text-slate-400 truncate mt-1">
+                              {delivery.url}
+                            </p>
+                            {delivery.statusCode && (
+                              <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
+                                HTTP {delivery.statusCode}
+                                {delivery.error && ` - ${delivery.error}`}
+                              </p>
+                            )}
+                            {delivery.error && !delivery.statusCode && (
+                              <p className="text-xs text-red-500 dark:text-red-400 mt-0.5">
+                                Error: {delivery.error}
+                              </p>
+                            )}
+                          </div>
+                          <span className="text-xs text-slate-400 dark:text-slate-500 whitespace-nowrap ml-2">
+                            {new Date(delivery.timestamp).toLocaleTimeString()}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 

@@ -3,13 +3,17 @@ import { Plus, X } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { LoadingSpinner } from '../ui/LoadingSpinner'
 import { ConfirmDialog } from '../ui/ConfirmDialog'
+import { CustomFieldInput } from './CustomFieldInput'
 import { supabase } from '../../lib/supabase'
-import type { Client, ClientStatus } from '../../types/database'
+import { useWorkspace } from '../../context/WorkspaceContext'
+import type { Client, ClientStatus, CustomFieldDefinition, WorkspaceCustomFields } from '../../types/database'
 
-interface CustomField {
+interface AdHocCustomField {
   key: string
   value: string
 }
+
+type TypedCustomFieldValues = Record<string, string>
 
 interface EditClientModalProps {
   isOpen: boolean
@@ -19,6 +23,7 @@ interface EditClientModalProps {
 }
 
 export function EditClientModal({ isOpen, onClose, client, onClientUpdated }: EditClientModalProps) {
+  const { currentWorkspace } = useWorkspace()
   const [name, setName] = useState('')
   const [company, setCompany] = useState('')
   const [email, setEmail] = useState('')
@@ -28,7 +33,18 @@ export function EditClientModal({ isOpen, onClose, client, onClientUpdated }: Ed
   const [value, setValue] = useState('')
   const [source, setSource] = useState('')
   const [notes, setNotes] = useState('')
-  const [customFields, setCustomFields] = useState<CustomField[]>([])
+  const [customFields, setCustomFields] = useState<AdHocCustomField[]>([])
+  const [typedCustomFields, setTypedCustomFields] = useState<TypedCustomFieldValues>({})
+
+  // Get custom field definitions from workspace settings
+  const [fieldDefinitions, setFieldDefinitions] = useState<CustomFieldDefinition[]>([])
+
+  useEffect(() => {
+    if (currentWorkspace) {
+      const settings = currentWorkspace.settings as WorkspaceCustomFields | null
+      setFieldDefinitions(settings?.fields || [])
+    }
+  }, [currentWorkspace])
 
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -91,15 +107,31 @@ export function EditClientModal({ isOpen, onClose, client, onClientUpdated }: Ed
 
       // Parse custom fields from JSONB
       if (client.custom_fields && typeof client.custom_fields === 'object') {
-        const fields = Object.entries(client.custom_fields as Record<string, string>).map(
-          ([key, value]) => ({ key, value: String(value) })
-        )
-        setCustomFields(fields.length > 0 ? fields : [])
+        const clientFields = client.custom_fields as Record<string, string | string[]>
+        const adHocFields: AdHocCustomField[] = []
+        const typedFieldVals: TypedCustomFieldValues = {}
+
+        // Separate typed fields from ad-hoc fields
+        Object.entries(clientFields).forEach(([key, fieldValue]) => {
+          if (key === 'tags') return // Skip tags
+
+          // Check if this matches a defined field by name
+          const fieldDef = fieldDefinitions.find(f => f.name === key)
+          if (fieldDef) {
+            typedFieldVals[fieldDef.id] = String(fieldValue)
+          } else {
+            adHocFields.push({ key, value: String(fieldValue) })
+          }
+        })
+
+        setTypedCustomFields(typedFieldVals)
+        setCustomFields(adHocFields)
       } else {
         setCustomFields([])
+        setTypedCustomFields({})
       }
     }
-  }, [client])
+  }, [client, fieldDefinitions])
 
   function addCustomField() {
     setCustomFields([...customFields, { key: '', value: '' }])
@@ -113,6 +145,10 @@ export function EditClientModal({ isOpen, onClose, client, onClientUpdated }: Ed
     const updated = [...customFields]
     updated[index][field] = value
     setCustomFields(updated)
+  }
+
+  function updateTypedCustomField(fieldId: string, fieldValue: string) {
+    setTypedCustomFields(prev => ({ ...prev, [fieldId]: fieldValue }))
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -130,15 +166,44 @@ export function EditClientModal({ isOpen, onClose, client, onClientUpdated }: Ed
       return
     }
 
+    // Validate required custom fields
+    for (const fieldDef of fieldDefinitions) {
+      if (fieldDef.required) {
+        const fieldValue = typedCustomFields[fieldDef.id]?.trim()
+        if (!fieldValue) {
+          setError(`${fieldDef.name} is required`)
+          return
+        }
+      }
+    }
+
     setLoading(true)
 
-    // Convert custom fields array to object
+    // Convert custom fields to object
     const customFieldsObj: Record<string, string> = {}
-    customFields.forEach(({ key, value }) => {
-      if (key.trim()) {
-        customFieldsObj[key.trim()] = value.trim()
+
+    // Add typed custom field values (from workspace settings)
+    Object.entries(typedCustomFields).forEach(([fieldId, fieldValue]) => {
+      const fieldDef = fieldDefinitions.find(f => f.id === fieldId)
+      if (fieldDef && fieldValue.trim()) {
+        customFieldsObj[fieldDef.name] = fieldValue.trim()
       }
     })
+
+    // Add ad-hoc custom fields
+    customFields.forEach(({ key, value: fieldValue }) => {
+      if (key.trim()) {
+        customFieldsObj[key.trim()] = fieldValue.trim()
+      }
+    })
+
+    // Preserve existing tags from original custom_fields
+    if (client.custom_fields && typeof client.custom_fields === 'object') {
+      const originalFields = client.custom_fields as Record<string, string | string[]>
+      if (originalFields.tags) {
+        (customFieldsObj as Record<string, string | string[]>).tags = originalFields.tags
+      }
+    }
 
     const { error: updateError } = await supabase
       .from('clients')
@@ -362,10 +427,30 @@ export function EditClientModal({ isOpen, onClose, client, onClientUpdated }: Ed
             />
           </div>
 
-          {/* Custom Fields Section */}
+          {/* Typed Custom Fields Section (from workspace settings) */}
+          {fieldDefinitions.length > 0 && (
+            <div className="md:col-span-2 border-t border-slate-200 dark:border-slate-700 pt-4">
+              <label className="label mb-3">Custom Fields</label>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {fieldDefinitions.map((fieldDef) => (
+                  <CustomFieldInput
+                    key={fieldDef.id}
+                    field={fieldDef}
+                    value={typedCustomFields[fieldDef.id] || ''}
+                    onChange={(value) => updateTypedCustomField(fieldDef.id, value)}
+                    disabled={success}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Ad-hoc Custom Fields Section */}
           <div className="md:col-span-2 border-t border-slate-200 dark:border-slate-700 pt-4">
             <div className="flex items-center justify-between mb-3">
-              <label className="label mb-0">Custom Fields</label>
+              <label className="label mb-0">
+                {fieldDefinitions.length > 0 ? 'Additional Fields' : 'Custom Fields'}
+              </label>
               <button
                 type="button"
                 onClick={addCustomField}
@@ -379,7 +464,7 @@ export function EditClientModal({ isOpen, onClose, client, onClientUpdated }: Ed
 
             {customFields.length === 0 ? (
               <p className="text-sm text-slate-500 dark:text-slate-400 italic">
-                No custom fields. Click "Add Field" to create one.
+                No additional fields. Click "Add Field" to create one.
               </p>
             ) : (
               <div className="space-y-3">

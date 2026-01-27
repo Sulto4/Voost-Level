@@ -4,12 +4,14 @@ import { Modal } from '../ui/Modal'
 import { LoadingSpinner } from '../ui/LoadingSpinner'
 import { MultiSelect } from '../ui/MultiSelect'
 import { RichTextEditor } from '../ui/RichTextEditor'
+import { CustomFieldInput } from './CustomFieldInput'
 import { supabase } from '../../lib/supabase'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../context/ToastContext'
 import { useFormDraft } from '../../hooks/useFormDraft'
-import type { ClientStatus } from '../../types/database'
+import { webhookEvents } from '../../services/webhookService'
+import type { ClientStatus, CustomFieldDefinition, WorkspaceCustomFields } from '../../types/database'
 
 // Predefined tag options for clients
 const TAG_OPTIONS = [
@@ -23,10 +25,13 @@ const TAG_OPTIONS = [
   { value: 'referral-source', label: 'Referral Source' },
 ]
 
-interface CustomField {
+interface AdHocCustomField {
   key: string
   value: string
 }
+
+// Values for typed custom fields (defined in settings)
+type TypedCustomFieldValues = Record<string, string>
 
 interface ClientFormData {
   name: string
@@ -39,7 +44,8 @@ interface ClientFormData {
   source: string
   notes: string
   tags: string[]
-  customFields: CustomField[]
+  customFields: AdHocCustomField[]
+  typedCustomFields: TypedCustomFieldValues
 }
 
 const initialFormData: ClientFormData = {
@@ -54,6 +60,7 @@ const initialFormData: ClientFormData = {
   notes: '',
   tags: [],
   customFields: [],
+  typedCustomFields: {},
 }
 
 /**
@@ -152,7 +159,17 @@ export function AddClientModal({ isOpen, onClose, onClientAdded }: AddClientModa
   })
 
   // Destructure form data for easier access
-  const { name, company, email, phone, website, status, value, source, notes, tags, customFields } = formData
+  const { name, company, email, phone, website, status, value, source, notes, tags, customFields, typedCustomFields } = formData
+
+  // Get custom field definitions from workspace settings
+  const [fieldDefinitions, setFieldDefinitions] = useState<CustomFieldDefinition[]>([])
+
+  useEffect(() => {
+    if (currentWorkspace) {
+      const settings = currentWorkspace.settings as WorkspaceCustomFields | null
+      setFieldDefinitions(settings?.fields || [])
+    }
+  }, [currentWorkspace])
 
   // Helper to update a single field
   const updateField = <K extends keyof ClientFormData>(field: K, fieldValue: ClientFormData[K]) => {
@@ -177,6 +194,10 @@ export function AddClientModal({ isOpen, onClose, onClientAdded }: AddClientModa
     updateField('customFields', updated)
   }
 
+  function updateTypedCustomField(fieldId: string, fieldValue: string) {
+    updateField('typedCustomFields', { ...typedCustomFields, [fieldId]: fieldValue })
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
@@ -199,6 +220,17 @@ export function AddClientModal({ isOpen, onClose, onClientAdded }: AddClientModa
       return
     }
 
+    // Validate required custom fields
+    for (const fieldDef of fieldDefinitions) {
+      if (fieldDef.required) {
+        const fieldValue = typedCustomFields[fieldDef.id]?.trim()
+        if (!fieldValue) {
+          setError(`${fieldDef.name} is required`)
+          return
+        }
+      }
+    }
+
     if (!currentWorkspace || !user) {
       setError('No workspace selected')
       return
@@ -208,6 +240,16 @@ export function AddClientModal({ isOpen, onClose, onClientAdded }: AddClientModa
 
     // Convert custom fields array to object and include tags
     const customFieldsObj: Record<string, string | string[]> = {}
+
+    // Add typed custom field values (from workspace settings)
+    Object.entries(typedCustomFields).forEach(([fieldId, fieldValue]) => {
+      const fieldDef = fieldDefinitions.find(f => f.id === fieldId)
+      if (fieldDef && fieldValue.trim()) {
+        customFieldsObj[fieldDef.name] = fieldValue.trim()
+      }
+    })
+
+    // Add ad-hoc custom fields
     customFields.forEach(({ key, value }) => {
       if (key.trim()) {
         customFieldsObj[key.trim()] = value.trim()
@@ -218,7 +260,7 @@ export function AddClientModal({ isOpen, onClose, onClientAdded }: AddClientModa
       customFieldsObj['tags'] = tags
     }
 
-    const { error: insertError } = await supabase
+    const { data: createdClient, error: insertError } = await supabase
       .from('clients')
       .insert({
         workspace_id: currentWorkspace.id,
@@ -234,6 +276,8 @@ export function AddClientModal({ isOpen, onClose, onClientAdded }: AddClientModa
         custom_fields: Object.keys(customFieldsObj).length > 0 ? customFieldsObj : null,
         created_by: user.id,
       })
+      .select()
+      .single()
 
     if (insertError) {
       // Detect specific error types
@@ -254,6 +298,11 @@ export function AddClientModal({ isOpen, onClose, onClientAdded }: AddClientModa
       showError(userMessage)
       setLoading(false)
     } else {
+      // Trigger webhooks for client.created event
+      if (createdClient) {
+        webhookEvents.clientCreated(currentWorkspace.id, createdClient).catch(console.error)
+      }
+
       setSuccess(true)
       setLoading(false)
       showSuccess(`Client "${name.trim()}" created successfully!`)
@@ -488,10 +537,30 @@ export function AddClientModal({ isOpen, onClose, onClientAdded }: AddClientModa
             />
           </div>
 
-          {/* Custom Fields Section */}
+          {/* Typed Custom Fields Section (from workspace settings) */}
+          {fieldDefinitions.length > 0 && (
+            <div className="md:col-span-2 border-t border-slate-200 dark:border-slate-700 pt-4">
+              <label className="label mb-3">Custom Fields</label>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {fieldDefinitions.map((fieldDef) => (
+                  <CustomFieldInput
+                    key={fieldDef.id}
+                    field={fieldDef}
+                    value={typedCustomFields[fieldDef.id] || ''}
+                    onChange={(value) => updateTypedCustomField(fieldDef.id, value)}
+                    disabled={success}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Ad-hoc Custom Fields Section */}
           <div className="md:col-span-2 border-t border-slate-200 dark:border-slate-700 pt-4">
             <div className="flex items-center justify-between mb-3">
-              <label className="label mb-0">Custom Fields</label>
+              <label className="label mb-0">
+                {fieldDefinitions.length > 0 ? 'Additional Fields' : 'Custom Fields'}
+              </label>
               <button
                 type="button"
                 onClick={addCustomField}
@@ -505,7 +574,7 @@ export function AddClientModal({ isOpen, onClose, onClientAdded }: AddClientModa
 
             {customFields.length === 0 ? (
               <p className="text-sm text-slate-500 dark:text-slate-400 italic">
-                No custom fields. Click "Add Field" to create one.
+                No additional fields. Click "Add Field" to create one.
               </p>
             ) : (
               <div className="space-y-3">
