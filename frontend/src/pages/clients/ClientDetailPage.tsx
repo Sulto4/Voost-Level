@@ -18,6 +18,7 @@ import { useWorkspace } from '../../context/WorkspaceContext'
 import type { Client, Project, Activity, ActivityType, ClientContact, File as FileType, LeadScoringConfig } from '../../types/database'
 import { getClientContext, type AIContextExport } from '../../services/aiContextService'
 import { calculateLeadScore, getScoreColor, getScoreLabel, type LeadScoreResult } from '../../lib/leadScoring'
+import { webhookEvents } from '../../services/webhookService'
 
 const tabs = ['Overview', 'Contacts', 'Projects', 'Activity', 'Files']
 
@@ -606,6 +607,10 @@ export function ClientDetailPage() {
       console.error('Error deleting client:', error)
       setDeleting(false)
     } else {
+      // Trigger webhooks for client.deleted event
+      if (currentWorkspace) {
+        webhookEvents.clientDeleted(currentWorkspace.id, client).catch(console.error)
+      }
       // Navigate back to clients list
       navigate('/clients')
     }

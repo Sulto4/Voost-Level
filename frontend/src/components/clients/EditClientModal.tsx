@@ -6,6 +6,7 @@ import { ConfirmDialog } from '../ui/ConfirmDialog'
 import { CustomFieldInput } from './CustomFieldInput'
 import { supabase } from '../../lib/supabase'
 import { useWorkspace } from '../../context/WorkspaceContext'
+import { webhookEvents } from '../../services/webhookService'
 import type { Client, ClientStatus, CustomFieldDefinition, WorkspaceCustomFields } from '../../types/database'
 
 interface AdHocCustomField {
@@ -236,6 +237,24 @@ export function EditClientModal({ isOpen, onClose, client, onClientUpdated }: Ed
       setError(userMessage)
       setLoading(false)
     } else {
+      // Trigger webhooks for client.updated event
+      if (currentWorkspace) {
+        const updatedClient = {
+          id: client.id,
+          name: name.trim(),
+          company: company.trim() || null,
+          email: email.trim() || null,
+          phone: phone.trim() || null,
+          website: website.trim() || null,
+          status,
+          value: value ? parseFloat(value) : null,
+          source: source.trim() || null,
+          notes: notes.trim() || null,
+          custom_fields: Object.keys(customFieldsObj).length > 0 ? customFieldsObj : null,
+        }
+        webhookEvents.clientUpdated(currentWorkspace.id, updatedClient, client).catch(console.error)
+      }
+
       setSuccess(true)
       setLoading(false)
       onClientUpdated?.()
