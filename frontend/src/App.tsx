@@ -23,6 +23,7 @@ import { ProjectDetailPage } from './pages/projects/ProjectDetailPage'
 import { TeamPage } from './pages/TeamPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { ReportsPage } from './pages/ReportsPage'
+import { CalendarPage } from './pages/CalendarPage'
 import { OnboardingPage } from './pages/OnboardingPage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { AcceptInvitePage } from './pages/auth/AcceptInvitePage'
@@ -67,6 +68,7 @@ function AppContent() {
           <Route path="projects" element={<ProjectsPage />} />
           <Route path="projects/:id" element={<ProjectDetailPage />} />
           <Route path="reports" element={<ReportsPage />} />
+          <Route path="calendar" element={<CalendarPage />} />
           <Route path="team" element={<TeamPage />} />
           <Route path="settings" element={<SettingsPage />} />
         </Route>
