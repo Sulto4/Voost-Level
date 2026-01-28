@@ -206,6 +206,7 @@ export type Database = {
           start_date: string | null
           due_date: string | null
           budget: number | null
+          code_path: string | null
           created_by: string
           created_at: string
           updated_at: string
@@ -219,6 +220,7 @@ export type Database = {
           start_date?: string | null
           due_date?: string | null
           budget?: number | null
+          code_path?: string | null
           created_by: string
           created_at?: string
           updated_at?: string
@@ -232,6 +234,7 @@ export type Database = {
           start_date?: string | null
           due_date?: string | null
           budget?: number | null
+          code_path?: string | null
           created_by?: string
           created_at?: string
           updated_at?: string

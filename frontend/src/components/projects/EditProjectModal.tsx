@@ -18,6 +18,7 @@ export function EditProjectModal({ isOpen, onClose, project, onProjectUpdated }:
   const [startDate, setStartDate] = useState('')
   const [dueDate, setDueDate] = useState('')
   const [budget, setBudget] = useState('')
+  const [codePath, setCodePath] = useState('')
 
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -32,6 +33,7 @@ export function EditProjectModal({ isOpen, onClose, project, onProjectUpdated }:
       setStartDate(project.start_date || '')
       setDueDate(project.due_date || '')
       setBudget(project.budget?.toString() || '')
+      setCodePath(project.code_path || '')
     }
   }, [project])
 
@@ -67,6 +69,7 @@ export function EditProjectModal({ isOpen, onClose, project, onProjectUpdated }:
         start_date: startDate || null,
         due_date: dueDate || null,
         budget: budget ? parseFloat(budget) : null,
+        code_path: codePath.trim() || null,
         updated_at: new Date().toISOString(),
       })
       .eq('id', project.id)
@@ -199,6 +202,24 @@ export function EditProjectModal({ isOpen, onClose, project, onProjectUpdated }:
               className="input"
               disabled={success}
             />
+          </div>
+
+          <div className="md:col-span-2">
+            <label htmlFor="codePath" className="label">
+              Code Path
+            </label>
+            <input
+              id="codePath"
+              type="text"
+              value={codePath}
+              onChange={(e) => setCodePath(e.target.value)}
+              className="input font-mono text-sm"
+              placeholder="E:\Projects\client-website"
+              disabled={success}
+            />
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              Local path to project source code (for AI agent context)
+            </p>
           </div>
         </div>
 

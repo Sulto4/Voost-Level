@@ -675,6 +675,18 @@ export function ProjectDetailPage() {
                       )}
                     </dd>
                   </div>
+                  <div>
+                    <dt className="text-sm text-slate-500 dark:text-slate-400">Code Path</dt>
+                    <dd className="text-slate-900 dark:text-white">
+                      {project.code_path ? (
+                        <code className="text-sm font-mono bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded break-all">
+                          {project.code_path}
+                        </code>
+                      ) : (
+                        <span className="text-slate-400 italic">Not set</span>
+                      )}
+                    </dd>
+                  </div>
                   {/* Budget vs Actual Display */}
                   {project.budget && project.budget > 0 && totalMinutes > 0 && (
                     <div className="col-span-1 md:col-span-2 mt-2 pt-4 border-t border-slate-200 dark:border-slate-700">
